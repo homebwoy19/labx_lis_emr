@@ -480,6 +480,7 @@ import { ResetPasswordScreen } from "./components/ResetPassword";
 import {
   DashboardScreen,
   PatientsScreen,
+  PatientDetailScreen,
   AdminTestOrders,
   AdminResultsScreen,
   AdminPaymentsScreen,
@@ -493,7 +494,8 @@ import {
 
 import {
   ReceptionistDashboard,
-  PatientDetailScreen,
+  ReceptionistPatientsScreen,
+  ReceptionistPatientDetailScreen,
   CreateOrderScreen,
   TestOrdersScreen,
   ReceptionistResultsScreen,
@@ -713,6 +715,19 @@ export default function App() {
                   setSelectedPatient={setSelectedPatient}
                 />
               )}
+              {screen === "patient_detail" && (
+                <PatientDetailScreen
+                  patient={selectedPatient}
+                  onNavigate={navigate}
+                />
+              )}
+              {screen === "create_order" && (
+                <CreateOrderScreen
+                  onNavigate={navigate}
+                  initialPatient={orderInitialConfig?.patient}
+                  startStep={orderInitialConfig?.startAtStep || 1}
+                />
+              )}
               {screen === "test_orders" && (
                 <AdminTestOrders onNavigate={navigate} />
               )}
@@ -737,14 +752,14 @@ export default function App() {
                 />
               )}
               {screen === "patients" && (
-                <PatientsScreen
+                <ReceptionistPatientsScreen
                   onNavigate={navigate}
                   setSelectedPatient={setSelectedPatient}
                   userCentre="Aguda Lab"
                 />
               )}
               {screen === "patient_detail" && (
-                <PatientDetailScreen
+                <ReceptionistPatientDetailScreen
                   patient={selectedPatient}
                   onNavigate={navigate}
                 />

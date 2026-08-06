@@ -141,7 +141,7 @@ export function ReceptionistDashboard() {
 // ============================================================================
 // RECEPTIONIST PATIENTS
 // ============================================================================
-export function PatientsScreen({
+export function ReceptionistPatientsScreen({
   onNavigate,
   setSelectedPatient,
   userCentre = "Aguda Lab",
@@ -171,7 +171,7 @@ export function PatientsScreen({
   function handleEditPatient() {
     setEditingPatient(false);
     setAlert(true);
-    settimeout(() => setAlert(false), 3000);
+    setTimeout(() => setAlert(false), 3000);
   }
 
   return (
@@ -304,13 +304,6 @@ export function PatientsScreen({
             <FormField label="Email">
               <Input type="email" placeholder="patient@email.com" />
             </FormField>
-            {/* <FormField label="Centre" required>
-              <Select>
-                {CENTRES.map((c) => (
-                  <option key={c.id}>{c.name}</option>
-                ))}
-              </Select>
-            </FormField> */}
             <div className="col-span-2">
               <FormField label="Address">
                 <Input placeholder="Street, City" />
@@ -379,7 +372,7 @@ export function PatientsScreen({
 // ============================================================================
 // RECEPTIONIST PATIENTS DETAILS
 // ============================================================================
-export function PatientDetailScreen({ patient, onNavigate }) {
+export function ReceptionistPatientDetailScreen({ patient, onNavigate }) {
   if (!patient)
     return (
       <div className="p-6 text-muted-foreground">No patient selected.</div>
@@ -420,7 +413,6 @@ export function PatientDetailScreen({ patient, onNavigate }) {
                 ["Gender", patient.gender],
                 ["Phone", patient.phone],
                 ["Email", patient.email],
-                ["Centre", patient.centre],
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between items-center">
                   <span className="text-muted-foreground">{k}</span>
@@ -621,6 +613,7 @@ export function CreateOrderScreen({
   const [selectedPatient, setSelectedPatient] = useState(
     initialPatient || null,
   );
+  const [showCreate, setShowCreate] = useState(false);
   const [selectedTests, setSelectedTests] = useState([]);
   const [patientSearch, setPatientSearch] = useState("");
   const [success, setSuccess] = useState(false);
@@ -730,10 +723,15 @@ export function CreateOrderScreen({
             ))}
           </div>
           <div className="flex justify-between pt-2">
-            <Btn variant="ghost" size="sm">
+            {/* <Btn 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setShowCreate(true)} 
+              className="cursor-pointer"
+            >
               <Plus className="w-3.5 h-3.5" />
               New Patient
-            </Btn>
+            </Btn> */}
             <Btn
               variant="primary"
               disabled={!selectedPatient}
@@ -813,6 +811,58 @@ export function CreateOrderScreen({
         </div>
       )}
 
+      {/* {showCreate && (
+        <Modal
+          title="Create New Patient"
+          onClose={() => setShowCreate(false)}
+          width="max-w-2xl"
+        >
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="First Name" required>
+              <Input placeholder="e.g. Amina" />
+            </FormField>
+            <FormField label="Last Name" required>
+              <Input placeholder="e.g. Hassan" />
+            </FormField>
+            <FormField label="Date of Birth" required>
+              <Input type="date" />
+            </FormField>
+            <FormField label="Gender" required>
+              <Select>
+                <option>Female</option>
+                <option>Male</option>
+                <option>Other</option>
+              </Select>
+            </FormField>
+            <FormField label="Phone Number" required>
+              <Input placeholder="+254 7XX XXX XXX" />
+            </FormField>
+            <FormField label="Email">
+              <Input type="email" placeholder="patient@email.com" />
+            </FormField>
+            <FormField label="Centre" required>
+              <Select>
+                {CENTRES.map((c) => (
+                  <option key={c.id}>{c.name}</option>
+                ))}
+              </Select>
+            </FormField>
+            <div className="col-span-2">
+              <FormField label="Address">
+                <Input placeholder="Street, City" />
+              </FormField>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 mt-6">
+            <Btn variant="secondary" onClick={() => setShowCreate(false)}>
+              Cancel
+            </Btn>
+            <Btn variant="primary" onClick={handleCreate}>
+              Create Patient
+            </Btn>
+          </div>
+        </Modal>
+      )} */}
       {step === 3 && (
         <Card className="p-5 space-y-5">
           <h3 className="text-sm font-semibold">Payment Summary</h3>
@@ -1005,7 +1055,7 @@ export function TestCatalogScreen() {
 // ============================================================================
 // RECEPTIONIST RESULTS
 // ============================================================================
-// export function ResultsScreen() {
+// export function ReceptionistResultsScreen() {
 //   const [search, setSearch] = useState("");
 //   const [preview, setPreview] = useState(null);
 //   const filtered = RESULTS.filter(
@@ -1071,6 +1121,7 @@ export function TestCatalogScreen() {
 //           ))}
 //         </Table>
 //       </Card>
+
 //       {preview && (
 //         <Modal
 //           title="Result Preview"
@@ -1118,11 +1169,121 @@ export function TestCatalogScreen() {
 //     </div>
 //   );
 // }
+// export function ReceptionistResultsScreen({ userCentre = "Aguda Lab" }) {
+//   const [search, setSearch] = useState("");
+//   const [preview, setPreview] = useState(null);
+//    const filtered = RESULTS.filter(
+//      (r) =>
+//       r.patientName.toLowerCase().includes(search.toLowerCase()) ||
+//        r.orderId.includes(search),
+//    );
+
+//   const centerResults = RESULTS.filter((r) => r.centre === userCentre);
+
+//   return (
+//     <div className="p-6 space-y-4">
+//       <div className="w-80">
+//         <SearchBar
+//           value={search}
+//           onChange={setSearch}
+//           placeholder="Search results…"
+//         />
+//       </div>
+//       <Card>
+//         <Table
+//           headers={["Order ID", "Patient", "Test", "Date", "Status", "Actions"]}
+//         >
+//           {centerResults.map((r) => {
+//             const displayStatus = r.status === "ready" ? "ready" : "pending";
+//             return (
+//               <tr key={r.id} className="hover:bg-muted/30">
+//                 <td className="px-4 py-3 font-mono text-xs text-primary">
+//                   {r.orderId}
+//                 </td>
+//                 <td className="px-4 py-3 text-sm font-medium">
+//                   {r.patientName}
+//                 </td>
+//                 <td className="px-4 py-3 text-sm">{r.testName}</td>
+//                 <td className="px-4 py-3 text-sm text-muted-foreground">
+//                   {r.date}
+//                 </td>
+//                 <td className="px-4 py-3">
+//                   <StatusBadge status={displayStatus} />
+//                 </td>
+//                 <td className="px-4 py-3">
+//                   <div className="flex gap-1">
+//                     <Btn
+//                       variant="ghost"
+//                       size="sm"
+//                       onClick={() => setPreview(r)}
+//                     >
+//                       <Eye className="w-3.5 h-3.5" />
+//                     </Btn>
+//                     {r.status === "ready" && (
+//                       <>
+//                         <Btn
+//                           variant="ghost"
+//                           size="sm"
+//                           onClick={() => window.print()}
+//                         >
+//                           <Printer className="w-3.5 h-3.5" />
+//                         </Btn>
+//                         <Btn variant="ghost" size="sm">
+//                           <Download className="w-3.5 h-3.5" />
+//                         </Btn>
+//                       </>
+//                     )}
+//                   </div>
+//                 </td>
+//               </tr>
+//             );
+//           })}
+//         </Table>
+//       </Card>
+
+//       {preview && (
+//         <Modal title="Result Information" onClose={() => setPreview(null)} width="max-w-2xl">
+//           <div className="space-y-4">
+//             <div className="grid grid-cols-2 gap-2 text-sm">
+//               <p>
+//                 <strong>Patient:</strong> {preview.patientName}
+//               </p>
+//               <p>
+//                 <strong>Test:</strong> {preview.testName}
+//               </p>
+//               <p>
+//                 <strong>Status:</strong>{" "}
+//                 {preview.status === "ready"
+//                   ? "Ready"
+//                   : "Waiting for result upload (Lab Tech)"}
+//               </p>
+//             </div>
+//             {preview.status === "ready" && (
+//               <div className="flex gap-3 pt-2">
+//                 <Btn variant="primary" onClick={() => window.print()}>
+//                   <Printer className="w-3.5 h-3.5" /> Print
+//                 </Btn>
+//                 <Btn variant="secondary">
+//                   <Download className="w-3.5 h-3.5" /> Download
+//                 </Btn>
+//               </div>
+//             )}
+//           </div>
+//         </Modal>
+//       )}
+//     </div>
+//   );
+// }
 export function ReceptionistResultsScreen({ userCentre = "Aguda Lab" }) {
   const [search, setSearch] = useState("");
   const [preview, setPreview] = useState(null);
 
-  const centerResults = RESULTS.filter((r) => r.centre === userCentre);
+  const filtered = RESULTS.filter(
+    (r) =>
+      r.centre === userCentre &&
+      (r.patientName.toLowerCase().includes(search.toLowerCase()) ||
+        r.orderId.includes(search)),
+  );
 
   return (
     <div className="p-6 space-y-4">
@@ -1135,9 +1296,17 @@ export function ReceptionistResultsScreen({ userCentre = "Aguda Lab" }) {
       </div>
       <Card>
         <Table
-          headers={["Order ID", "Patient", "Test", "Date", "Status", "Actions"]}
+          headers={[
+            "Order ID",
+            "Patient",
+            "Test",
+            "Date",
+            "Status",
+            "File",
+            "Actions",
+          ]}
         >
-          {centerResults.map((r) => {
+          {filtered.map((r) => {
             const displayStatus = r.status === "ready" ? "ready" : "pending";
             return (
               <tr key={r.id} className="hover:bg-muted/30">
@@ -1153,6 +1322,11 @@ export function ReceptionistResultsScreen({ userCentre = "Aguda Lab" }) {
                 </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={displayStatus} />
+                </td>
+                <td className="px-4 py-3">
+                  <Badge variant={r.fileType === "pdf" ? "danger" : "teal"}>
+                    {r.fileType.toUpperCase()}
+                  </Badge>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1">
@@ -1186,14 +1360,27 @@ export function ReceptionistResultsScreen({ userCentre = "Aguda Lab" }) {
       </Card>
 
       {preview && (
-        <Modal title="Result Information" onClose={() => setPreview(null)}>
+        <Modal
+          title="Result Information"
+          onClose={() => setPreview(null)}
+          width="max-w-2xl"
+        >
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2 text-sm">
               <p>
                 <strong>Patient:</strong> {preview.patientName}
               </p>
               <p>
+                <strong>Order:</strong> {preview.orderId}
+              </p>
+              <p>
                 <strong>Test:</strong> {preview.testName}
+              </p>
+              <p>
+                <strong>Centre:</strong> {preview.centre}
+              </p>
+              <p>
+                <strong>Date:</strong> {preview.date}
               </p>
               <p>
                 <strong>Status:</strong>{" "}
