@@ -1374,7 +1374,7 @@ export function ReceptionistResultsScreen({ userCentre = "Aguda Lab" }) {
                 <p className="text-xs text-muted-foreground">
                   <strong>Status</strong>
                 </p>
-                <p>
+                <p className="font-medium">
                   {preview.status === "ready"
                     ? "Ready"
                     : "Waiting for result upload (Lab Tech)"}
