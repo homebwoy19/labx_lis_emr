@@ -1929,9 +1929,10 @@ export function AdminResultsScreen() {
                 <p className="font-medium">{preview.date}</p>
               </div>
               <div>
+                <p className="text-xs text-muted-foreground">
+                  <strong>Status</strong>
+                </p>
                 <p>
-                  {" "}
-                  <strong>Status</strong>{" "}
                   {preview.status === "ready"
                     ? "Ready"
                     : "Waiting for result upload (Lab Tech)"}

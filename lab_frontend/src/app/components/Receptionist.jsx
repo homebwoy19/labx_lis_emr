@@ -1366,22 +1366,28 @@ export function ReceptionistResultsScreen({ userCentre = "Aguda Lab" }) {
                 <p className="text-xs text-muted-foreground">Test</p>
                 <p className="font-medium">{preview.testName}</p>
               </div>
-              {/* <div>
-                <p className="text-xs text-muted-foreground">Centre:</p>
-                <p className="font-medium">{preview.centre}</p>
-              </div> */}
               <div>
                 <p className="text-xs text-muted-foreground">Date</p>
                 <p className="font-medium">{preview.date}</p>
               </div>
               <div>
+                <p className="text-xs text-muted-foreground">
+                  <strong>Status</strong>
+                </p>
                 <p>
-                  {" "}
-                  <strong>Status</strong>{" "}
                   {preview.status === "ready"
                     ? "Ready"
                     : "Waiting for result upload (Lab Tech)"}
                 </p>
+              </div>
+              <div className="h-48 bg-muted rounded-lg flex items-center justify-center border border-border">
+                <div className="text-center text-muted-foreground">
+                  <FileText className="w-10 h-10 mx-auto mb-2" />
+                  <p className="text-sm">Result document preview</p>
+                  <p className="text-xs mt-1">
+                    {preview.fileType.toUpperCase()} file available for download
+                  </p>
+                </div>
               </div>
             </div>
             {preview.status === "ready" && (
