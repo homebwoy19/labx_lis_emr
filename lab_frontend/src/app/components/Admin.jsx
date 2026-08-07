@@ -1869,10 +1869,31 @@ export function AdminResultsScreen() {
                 <td className="px-4 py-3">
                   <StatusBadge status={displayStatus} />
                 </td>
+
                 <td className="px-4 py-3">
-                  <Btn variant="ghost" size="sm" onClick={() => setPreview(r)}>
-                    <Eye className="w-3.5 h-3.5" />
-                  </Btn>
+                  <div className="flex items-center gap-1">
+                    <Btn
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setPreview(r)}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </Btn>
+                    {r.status === "ready" && (
+                      <>
+                        <Btn
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => window.print()}
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                        </Btn>
+                        <Btn variant="ghost" size="sm">
+                          <Download className="w-3.5 h-3.5" />
+                        </Btn>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             );
@@ -1880,7 +1901,11 @@ export function AdminResultsScreen() {
         </Table>
       </Card>
       {preview && (
-        <Modal title="Result Details" onClose={() => setPreview(null)}>
+        <Modal
+          title="Result Details"
+          onClose={() => setPreview(null)}
+          width="max-w-2xl"
+        >
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
@@ -1899,12 +1924,30 @@ export function AdminResultsScreen() {
                 <p className="text-xs text-muted-foreground">Centre</p>
                 <p className="font-medium">{preview.centre}</p>
               </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Date</p>
+                <p className="font-medium">{preview.date}</p>
+              </div>
+              <div>
+                <p>
+                  {" "}
+                  <strong>Status</strong>{" "}
+                  {preview.status === "ready"
+                    ? "Ready"
+                    : "Waiting for result upload (Lab Tech)"}
+                </p>
+              </div>
             </div>
-            <div className="h-40 bg-muted rounded-lg flex items-center justify-center border border-border">
-              <p className="text-sm text-muted-foreground">
-                PDF Result Document
-              </p>
-            </div>
+            {preview.status === "ready" && (
+              <div className="flex gap-3 pt-2">
+                <Btn variant="primary" onClick={() => window.print()}>
+                  <Printer className="w-3.5 h-3.5" /> Print
+                </Btn>
+                <Btn variant="secondary">
+                  <Download className="w-3.5 h-3.5" /> Download
+                </Btn>
+              </div>
+            )}
           </div>
         </Modal>
       )}

@@ -1296,15 +1296,7 @@ export function ReceptionistResultsScreen({ userCentre = "Aguda Lab" }) {
       </div>
       <Card>
         <Table
-          headers={[
-            "Order ID",
-            "Patient",
-            "Test",
-            "Date",
-            "Status",
-            "File",
-            "Actions",
-          ]}
+          headers={["Order ID", "Patient", "Test", "Date", "Status", "Actions"]}
         >
           {filtered.map((r) => {
             const displayStatus = r.status === "ready" ? "ready" : "pending";
@@ -1322,11 +1314,6 @@ export function ReceptionistResultsScreen({ userCentre = "Aguda Lab" }) {
                 </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={displayStatus} />
-                </td>
-                <td className="px-4 py-3">
-                  <Badge variant={r.fileType === "pdf" ? "danger" : "teal"}>
-                    {r.fileType.toUpperCase()}
-                  </Badge>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1">
@@ -1361,33 +1348,41 @@ export function ReceptionistResultsScreen({ userCentre = "Aguda Lab" }) {
 
       {preview && (
         <Modal
-          title="Result Information"
+          title="Result Details"
           onClose={() => setPreview(null)}
           width="max-w-2xl"
         >
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <p>
-                <strong>Patient:</strong> {preview.patientName}
-              </p>
-              <p>
-                <strong>Order:</strong> {preview.orderId}
-              </p>
-              <p>
-                <strong>Test:</strong> {preview.testName}
-              </p>
-              <p>
-                <strong>Centre:</strong> {preview.centre}
-              </p>
-              <p>
-                <strong>Date:</strong> {preview.date}
-              </p>
-              <p>
-                <strong>Status:</strong>{" "}
-                {preview.status === "ready"
-                  ? "Ready"
-                  : "Waiting for result upload (Lab Tech)"}
-              </p>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-xs text-muted-foreground">Patient</p>
+                <p className="font-medium">{preview.patientName}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Order</p>
+                <p className="font-medium">{preview.orderId}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Test</p>
+                <p className="font-medium">{preview.testName}</p>
+              </div>
+              {/* <div>
+                <p className="text-xs text-muted-foreground">Centre:</p>
+                <p className="font-medium">{preview.centre}</p>
+              </div> */}
+              <div>
+                <p className="text-xs text-muted-foreground">Date</p>
+                <p className="font-medium">{preview.date}</p>
+              </div>
+              <div>
+                <p>
+                  {" "}
+                  <strong>Status</strong>{" "}
+                  {preview.status === "ready"
+                    ? "Ready"
+                    : "Waiting for result upload (Lab Tech)"}
+                </p>
+              </div>
             </div>
             {preview.status === "ready" && (
               <div className="flex gap-3 pt-2">
