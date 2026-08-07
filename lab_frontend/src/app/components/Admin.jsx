@@ -1869,7 +1869,6 @@ export function AdminResultsScreen() {
                 <td className="px-4 py-3">
                   <StatusBadge status={displayStatus} />
                 </td>
-
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1">
                     <Btn
@@ -1900,6 +1899,7 @@ export function AdminResultsScreen() {
           })}
         </Table>
       </Card>
+
       {preview && (
         <Modal
           title="Result Details"
@@ -1932,11 +1932,20 @@ export function AdminResultsScreen() {
                 <p className="text-xs text-muted-foreground">
                   <strong>Status</strong>
                 </p>
-                <p>
+                <p className="font-medium">
                   {preview.status === "ready"
                     ? "Ready"
                     : "Waiting for result upload (Lab Tech)"}
                 </p>
+              </div>
+              <div className="h-48 bg-muted rounded-lg flex items-center justify-center border border-border">
+                <div className="text-center text-muted-foreground">
+                  <FileText className="w-10 h-10 mx-auto mb-2" />
+                  <p className="text-sm">Result document preview</p>
+                  <p className="text-xs mt-1">
+                    {preview.fileType.toUpperCase()} file available for download
+                  </p>
+                </div>
               </div>
             </div>
             {preview.status === "ready" && (
