@@ -1,0 +1,29 @@
+node_modules/
+dist/
+build/
+coverage/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Storage (local dev uploads)
+storage/tmp/
+storage/uploads/

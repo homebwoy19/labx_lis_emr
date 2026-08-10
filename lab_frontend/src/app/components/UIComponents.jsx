@@ -43,6 +43,13 @@ export function StatusBadge({ status }) {
     ready: { variant: "success", label: "Ready" },
     reviewed: { variant: "teal", label: "Reviewed" },
     refunded: { variant: "neutral", label: "Refunded" },
+    // Platform / Super Admin statuses
+    suspended: { variant: "danger", label: "Suspended" },
+    trial: { variant: "info", label: "Trial" },
+    expired: { variant: "danger", label: "Expired" },
+    rejected: { variant: "danger", label: "Rejected" },
+    past_due: { variant: "warning", label: "Past Due" },
+    online: { variant: "success", label: "Online" },
   };
   const config = map[status] ?? { variant: "neutral", label: status };
   return <Badge variant={config.variant}>{config.label}</Badge>;

@@ -1,0 +1,895 @@
+// ============================================================================
+// Foundation Lab LIS — Prisma Schema
+// Cloud-based multi-tenant Laboratory Information System
+//
+// Multi-tenancy model:
+//   Organization (Laboratory)  1---*  Branch
+//   Organization               1---*  User (scoped to a Branch, except LAB_ADMIN)
+//   Platform (Super Admin)     owns all Organizations
+//
+// Tenant isolation is enforced at the application layer (Prisma client
+// extension) by auto-filtering on organizationId / branchId. Every tenant
+// table therefore carries those columns explicitly.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum OrganizationStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum BranchStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  LOCKED
+}
+
+enum RoleScope {
+  PLATFORM // Super Admin — spans all organizations
+  ORGANIZATION // Lab Admin — one organization, all branches
+  BRANCH // Operational staff — one branch
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNKNOWN
+}
+
+enum TestType {
+  LABORATORY
+  RADIOLOGY
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  AWAITING_SAMPLE
+  SAMPLE_COLLECTED
+  IN_PROGRESS
+  RESULT_ENTERED
+  PENDING_APPROVAL
+  APPROVED
+  RELEASED
+  REJECTED
+  CANCELLED
+}
+
+enum OrderItemStatus {
+  ORDERED
+  SAMPLE_COLLECTED
+  IN_PROGRESS
+  RESULT_ENTERED
+  APPROVED
+  REJECTED
+}
+
+enum SampleStatus {
+  PENDING
+  COLLECTED
+  RECEIVED
+  REJECTED
+}
+
+enum ResultType {
+  STRUCTURED
+  UPLOADED
+}
+
+enum ResultStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  MOBILE
+  WAIVER
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  EXPIRING_SOON
+  PAST_DUE
+  GRACE_PERIOD
+  PENDING_RENEWAL
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+}
+
+enum DocumentKind {
+  LOGO
+  LETTERHEAD
+  SIGNATURE
+  FOOTER
+  RESULT_PDF
+  RESULT_UPLOAD
+  OTHER
+}
+
+// ============================================================================
+// PLATFORM / TENANCY
+// ============================================================================
+
+model Organization {
+  id         String             @id @default(uuid()) @db.Uuid
+  name       String
+  // Short acronym used to build patient IDs, e.g. "MDL" -> MDL-PID-0000001
+  acronym    String             @unique
+  slug       String             @unique
+  email      String?
+  phone      String?
+  address    String?
+  status     OrganizationStatus @default(PENDING)
+  // Running counter used to allocate sequential patient IDs per laboratory.
+  patientSeq Int                @default(0)
+  orderSeq   Int                @default(0)
+
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedBy String?   @db.Uuid
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  branches            Branch[]
+  users               User[]
+  roles               Role[]
+  patients            Patient[]
+  tests               Test[]
+  testCategories      TestCategory[]
+  orders              TestOrder[]
+  samples             Sample[]
+  results             Result[]
+  payments            Payment[]
+  subscriptions       Subscription[]
+  subscriptionHistory SubscriptionHistory[]
+  notifications       Notification[]
+  documents           Document[]
+  letterhead          Letterhead?
+  settings            OrganizationSetting[]
+  auditLogs           AuditLog[]
+
+  @@index([status])
+  @@map("organizations")
+}
+
+model Branch {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  name           String
+  code           String
+  email          String?
+  phone          String?
+  address        String?
+  isHeadOffice   Boolean      @default(false)
+  status         BranchStatus @default(PENDING_APPROVAL)
+  // Super Admin approval metadata (branch creation requires approval).
+  approvedBy     String?      @db.Uuid
+  approvedAt     DateTime?
+
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedBy String?   @db.Uuid
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  users        User[]
+  patients     Patient[]
+  orders       TestOrder[]
+  samples      Sample[]
+  results      Result[]
+  payments     Payment[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([status])
+  @@map("branches")
+}
+
+// ============================================================================
+// IDENTITY / RBAC
+// ============================================================================
+
+model User {
+  id             String  @id @default(uuid()) @db.Uuid
+  // Null organizationId => platform-level Super Admin.
+  organizationId String? @db.Uuid
+  // Null branchId => organization-wide (Lab Admin) or platform user.
+  branchId       String? @db.Uuid
+
+  firstName    String
+  lastName     String
+  email        String     @unique
+  phone        String?
+  passwordHash String
+  status       UserStatus @default(INVITED)
+
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+
+  // Account lockout tracking
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedBy String?   @db.Uuid
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization  Organization?  @relation(fields: [organizationId], references: [id])
+  branch        Branch?        @relation(fields: [branchId], references: [id])
+  roles         UserRole[]
+  sessions      Session[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  @@index([organizationId])
+  @@index([branchId])
+  @@index([email])
+  @@index([status])
+  @@map("users")
+}
+
+model Role {
+  id             String       @id @default(uuid()) @db.Uuid
+  // Null organizationId => system role (SUPER_ADMIN and role templates).
+  organizationId String?      @db.Uuid
+  key            String // e.g. "LAB_ADMIN", "RECEPTIONIST"
+  name           String
+  description    String?
+  scope          RoleScope
+  isSystem       Boolean      @default(false)
+  status         RecordStatus @default(ACTIVE)
+
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedBy String?   @db.Uuid
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization?    @relation(fields: [organizationId], references: [id])
+  permissions  RolePermission[]
+  users        UserRole[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  // Canonical string, e.g. "patient:create", "result:approve"
+  key         String   @unique
+  resource    String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+
+  @@index([resource])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String   @db.Uuid
+  permissionId String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId    String   @db.Uuid
+  roleId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+// ============================================================================
+// SESSIONS / TOKENS
+// ============================================================================
+
+model Session {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  // Stable identifier for a physical device ("remember devices" + device cap).
+  deviceId     String
+  deviceName   String?
+  userAgent    String?
+  ipAddress    String?
+  lastActiveAt DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model RefreshToken {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  sessionId    String    @db.Uuid
+  // We store only a hash of the refresh token, never the raw value.
+  tokenHash    String    @unique
+  // Rotation chain: when a token is used, it's revoked and replacedBy is set.
+  replacedById String?   @unique @db.Uuid
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session    Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  replacedBy RefreshToken? @relation("TokenRotation", fields: [replacedById], references: [id])
+  replaces   RefreshToken? @relation("TokenRotation")
+
+  @@index([userId])
+  @@index([sessionId])
+  @@map("refresh_tokens")
+}
+
+model VerificationToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  // "EMAIL_VERIFY" | "PASSWORD_RESET"
+  purpose   String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("verification_tokens")
+}
+
+// ============================================================================
+// PATIENTS
+// ============================================================================
+
+model Patient {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  branchId       String       @db.Uuid
+  // Human-readable, unique per laboratory: e.g. MDL-PID-0000001
+  patientCode    String
+  firstName      String
+  lastName       String
+  gender         Gender       @default(UNKNOWN)
+  dateOfBirth    DateTime?
+  phone          String?
+  email          String?
+  address        String?
+  status         RecordStatus @default(ACTIVE)
+
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedBy String?   @db.Uuid
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  branch       Branch       @relation(fields: [branchId], references: [id])
+  orders       TestOrder[]
+
+  @@unique([organizationId, patientCode])
+  @@index([organizationId])
+  @@index([branchId])
+  @@index([organizationId, lastName, firstName])
+  @@map("patients")
+}
+
+// ============================================================================
+// TEST CATALOG
+// ============================================================================
+
+model TestCategory {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  name           String
+  description    String?
+  status         RecordStatus @default(ACTIVE)
+
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedBy String?   @db.Uuid
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  tests        Test[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("test_categories")
+}
+
+model Test {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  categoryId     String?      @db.Uuid
+  code           String
+  name           String
+  type           TestType     @default(LABORATORY)
+  price          Decimal      @db.Decimal(12, 2)
+  // Turnaround time in hours (informational).
+  turnaroundHrs  Int?
+  // JSON template describing structured result fields (analytes, units, ranges).
+  resultTemplate Json?
+  status         RecordStatus @default(ACTIVE)
+
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedBy String?   @db.Uuid
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  category     TestCategory?   @relation(fields: [categoryId], references: [id])
+  orderItems   TestOrderItem[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([organizationId, type])
+  @@map("tests")
+}
+
+// ============================================================================
+// ORDERS / SAMPLES / RESULTS
+// ============================================================================
+
+model TestOrder {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizationId String      @db.Uuid
+  branchId       String      @db.Uuid
+  patientId      String      @db.Uuid
+  // Human-readable, e.g. ORD-2026-0141
+  orderCode      String
+  status         OrderStatus @default(PENDING_PAYMENT)
+  totalAmount    Decimal     @default(0) @db.Decimal(12, 2)
+  notes          String?
+
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedBy String?   @db.Uuid
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  branch       Branch          @relation(fields: [branchId], references: [id])
+  patient      Patient         @relation(fields: [patientId], references: [id])
+  items        TestOrderItem[]
+  samples      Sample[]
+  results      Result[]
+  payments     Payment[]
+
+  @@unique([organizationId, orderCode])
+  @@index([organizationId])
+  @@index([branchId])
+  @@index([patientId])
+  @@index([status])
+  @@map("test_orders")
+}
+
+model TestOrderItem {
+  id        String          @id @default(uuid()) @db.Uuid
+  orderId   String          @db.Uuid
+  testId    String          @db.Uuid
+  // Snapshot of price/name at time of order (catalog may change later).
+  testName  String
+  unitPrice Decimal         @db.Decimal(12, 2)
+  status    OrderItemStatus @default(ORDERED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order  TestOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  test   Test      @relation(fields: [testId], references: [id])
+  result Result?
+
+  @@index([orderId])
+  @@index([testId])
+  @@map("test_order_items")
+}
+
+model Sample {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  branchId       String       @db.Uuid
+  orderId        String       @db.Uuid
+  // Barcode / accession label
+  barcode        String
+  sampleType     String?
+  status         SampleStatus @default(PENDING)
+  collectedBy    String?      @db.Uuid
+  collectedAt    DateTime?
+
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  branch       Branch       @relation(fields: [branchId], references: [id])
+  order        TestOrder    @relation(fields: [orderId], references: [id])
+
+  @@unique([organizationId, barcode])
+  @@index([organizationId])
+  @@index([orderId])
+  @@index([status])
+  @@map("samples")
+}
+
+model Result {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  branchId       String       @db.Uuid
+  orderId        String       @db.Uuid
+  orderItemId    String       @unique @db.Uuid
+  type           ResultType   @default(STRUCTURED)
+  status         ResultStatus @default(DRAFT)
+
+  // Structured payload (analyte -> value/unit/flag) when type = STRUCTURED.
+  data           Json?
+  interpretation String?
+  // Generated or uploaded PDF reference.
+  documentId     String? @db.Uuid
+
+  enteredBy       String?   @db.Uuid
+  enteredAt       DateTime?
+  approvedBy      String?   @db.Uuid
+  approvedAt      DateTime?
+  rejectedBy      String?   @db.Uuid
+  rejectedAt      DateTime?
+  rejectionReason String?
+  releasedBy      String?   @db.Uuid
+  releasedAt      DateTime?
+
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  branch       Branch        @relation(fields: [branchId], references: [id])
+  order        TestOrder     @relation(fields: [orderId], references: [id])
+  orderItem    TestOrderItem @relation(fields: [orderItemId], references: [id])
+  document     Document?     @relation(fields: [documentId], references: [id])
+
+  @@index([organizationId])
+  @@index([branchId])
+  @@index([orderId])
+  @@index([status])
+  @@map("results")
+}
+
+// ============================================================================
+// PAYMENTS
+// ============================================================================
+
+model Payment {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @db.Uuid
+  branchId       String        @db.Uuid
+  orderId        String        @db.Uuid
+  amount         Decimal       @db.Decimal(12, 2)
+  method         PaymentMethod @default(CASH)
+  status         PaymentStatus @default(PENDING)
+  reference      String?
+  // Reserved for future gateway integration (Paystack/Flutterwave).
+  gateway        String?
+  gatewayRef     String?
+  paidAt         DateTime?
+
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  branch       Branch       @relation(fields: [branchId], references: [id])
+  order        TestOrder    @relation(fields: [orderId], references: [id])
+
+  @@index([organizationId])
+  @@index([branchId])
+  @@index([orderId])
+  @@index([status])
+  @@map("payments")
+}
+
+// ============================================================================
+// BILLING / SUBSCRIPTIONS
+// ============================================================================
+
+model Subscription {
+  id                 String             @id @default(uuid()) @db.Uuid
+  organizationId     String             @db.Uuid
+  plan               String
+  billingCycle       BillingCycle       @default(MONTHLY)
+  status             SubscriptionStatus @default(TRIALING)
+  // Recorded amount for the current period, in NGN. For Enterprise this is the
+  // exact custom amount agreed with the customer; for other plans it mirrors the
+  // catalog price for the chosen billing cycle.
+  amount             Decimal            @default(0) @db.Decimal(12, 2)
+  currency           String             @default("NGN")
+  isCustomPricing    Boolean            @default(false)
+  maxBranches        Int                @default(1)
+  maxUsers           Int                @default(10)
+  // Grace window (in days) the Super Admin grants this lab after the period ends
+  // before backend access is blocked. 0 = no grace.
+  gracePeriodDays    Int                @default(0)
+  startedAt          DateTime           @default(now())
+  currentPeriodStart DateTime           @default(now())
+  currentPeriodEnd   DateTime?
+  renewedAt          DateTime?
+  renewedBy          String?            @db.Uuid
+  cancelledAt        DateTime?
+
+  createdBy String?  @db.Uuid
+  updatedBy String?  @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization          @relation(fields: [organizationId], references: [id])
+  history      SubscriptionHistory[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+// Immutable, append-only record of each subscription period. A new row is
+// written on initial creation and on every renewal — existing rows are never
+// overwritten, preserving the full billing history per laboratory.
+model SubscriptionHistory {
+  id                String             @id @default(uuid()) @db.Uuid
+  organizationId    String             @db.Uuid
+  subscriptionId    String             @db.Uuid
+  plan              String
+  billingCycle      BillingCycle
+  amount            Decimal            @db.Decimal(12, 2)
+  currency          String             @default("NGN")
+  isCustomPricing   Boolean            @default(false)
+  maxBranches       Int
+  maxUsers          Int
+  periodStart       DateTime
+  periodEnd         DateTime
+  status            SubscriptionStatus
+  renewedAt         DateTime?
+  renewedBy         String?            @db.Uuid
+  // End date of the immediately preceding period (null for the very first period).
+  previousPeriodEnd DateTime?
+  note              String?
+
+  createdBy String?  @db.Uuid
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([organizationId])
+  @@index([subscriptionId])
+  @@map("subscription_history")
+}
+
+// ============================================================================
+// BRANDING / DOCUMENTS
+// ============================================================================
+
+model Letterhead {
+  id                   String  @id @default(uuid()) @db.Uuid
+  organizationId       String  @unique @db.Uuid
+  logoDocumentId       String? @db.Uuid
+  letterheadDocumentId String? @db.Uuid
+  signatureDocumentId  String? @db.Uuid
+  footerText           String?
+  address              String?
+  phone                String?
+  email                String?
+
+  createdBy String?  @db.Uuid
+  updatedBy String?  @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("letterheads")
+}
+
+model Document {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  branchId       String?      @db.Uuid
+  kind           DocumentKind
+  // Path/key inside Supabase Storage bucket.
+  storageKey     String
+  fileName       String
+  mimeType       String
+  sizeBytes      Int
+  checksum       String?
+
+  createdBy String?   @db.Uuid
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  results      Result[]
+
+  @@index([organizationId])
+  @@index([kind])
+  @@map("documents")
+}
+
+// ============================================================================
+// SETTINGS / CONFIG
+// ============================================================================
+
+model OrganizationSetting {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  key            String
+  value          Json
+  updatedBy      String?  @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+  @@map("organization_settings")
+}
+
+model SystemConfiguration {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  value     Json
+  updatedBy String?  @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_configurations")
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String?             @db.Uuid
+  userId         String              @db.Uuid
+  channel        NotificationChannel @default(IN_APP)
+  // Category tag, e.g. "SUBSCRIPTION_REMINDER" / "SUBSCRIPTION_RENEWAL_PROMPT".
+  type           String?
+  title          String
+  body           String
+  data           Json?
+  // Idempotency key for system-generated notifications. Unique so a repeatable
+  // background job can never emit the same reminder twice. Null for ordinary
+  // notifications (Postgres allows multiple NULLs under a unique constraint).
+  dedupeKey      String?             @unique
+  readAt         DateTime?
+  createdAt      DateTime            @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+// ============================================================================
+// AUDIT / ACTIVITY
+// ============================================================================
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String?  @db.Uuid
+  actorId        String?  @db.Uuid
+  // e.g. "LOGIN", "PATIENT_CREATE", "RESULT_APPROVE"
+  action         String
+  entityType     String?
+  entityId       String?
+  oldValue       Json?
+  newValue       Json?
+  ipAddress      String?
+  userAgent      String?
+  requestId      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  actor        User?         @relation(fields: [actorId], references: [id])
+
+  @@index([organizationId])
+  @@index([actorId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

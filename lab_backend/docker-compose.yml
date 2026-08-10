@@ -1,0 +1,66 @@
+# ============================================================================
+# Local development stack.
+#
+#   api      — the LIS backend (this repo)
+#   db       — PostgreSQL (stands in for Supabase Postgres locally)
+#   redis    — cache + BullMQ queue backend
+#
+# Usage:
+#   docker compose up --build
+#   docker compose exec api pnpm prisma migrate deploy
+#   docker compose exec api pnpm db:seed
+# ============================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lis
+      POSTGRES_PASSWORD: lis_password
+      POSTGRES_DB: lis
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lis -d lis"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgresql://lis:lis_password@db:5432/lis
+      DIRECT_URL: postgresql://lis:lis_password@db:5432/lis
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: dev_access_secret_change_me_min_32_chars_long
+      JWT_REFRESH_SECRET: dev_refresh_secret_change_me_min_32_chars_long
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - "4000:4000"
+
+volumes:
+  db_data:

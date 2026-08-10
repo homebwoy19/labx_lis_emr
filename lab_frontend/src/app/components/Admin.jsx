@@ -1,861 +1,5 @@
-// import React, { useState } from "react";
-// import {
-//   DollarSign,
-//   TrendingUp,
-//   Users,
-//   CheckCircle,
-//   Clock,
-//   Building2,
-//   ArrowRight,
-//   Eye,
-//   Plus,
-//   Edit2,
-//   XCircle,
-//   Download,
-//   Activity,
-//   Settings,
-// } from "lucide-react";
-// import {
-//   LineChart,
-//   Line,
-//   BarChart,
-//   Bar,
-//   PieChart,
-//   Pie,
-//   Cell,
-//   XAxis,
-//   YAxis,
-//   CartesianGrid,
-//   Tooltip,
-//   Legend,
-//   ResponsiveContainer,
-// } from "recharts";
-// import {
-//   Card,
-//   StatCard,
-//   Table,
-//   StatusBadge,
-//   Badge,
-//   Btn,
-//   Select,
-//   SearchBar,
-//   Modal,
-//   Alert,
-//   FormField,
-//   Input,
-// } from "./UIComponents";
-// import {
-//   CENTRES,
-//   USERS,
-//   TEST_ORDERS,
-//   AUDIT_LOGS,
-//   revenueData,
-//   testsByCategoryData,
-//   testsByDayData,
-//   PIE_COLORS,
-// } from "./sharedData";
-
-// export function DashboardScreen({ onNavigate }) {
-//   return (
-//     <div className="p-6 space-y-6">
-//       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-//         <StatCard
-//           icon={DollarSign}
-//           label="Total Revenue"
-//           value="₦20.4M"
-//           sub="All centres · All time"
-//           color="bg-blue-500"
-//         />
-//         <StatCard
-//           icon={TrendingUp}
-//           label="Today's Revenue"
-//           value="₦311,100"
-//           sub="+12% vs yesterday"
-//           color="bg-teal-500"
-//         />
-//         <StatCard
-//           icon={Users}
-//           label="Total Patients"
-//           value="4,821"
-//           sub="106 new this month"
-//           color="bg-violet-500"
-//         />
-//         <StatCard
-//           icon={CheckCircle}
-//           label="Tests Completed"
-//           value="247"
-//           sub="This month"
-//           color="bg-emerald-500"
-//         />
-//         <StatCard
-//           icon={Clock}
-//           label="Pending Tests"
-//           value="18"
-//           sub="Across all centres"
-//           color="bg-amber-500"
-//         />
-//         <StatCard
-//           icon={Building2}
-//           label="Active Centres"
-//           value="2 / 2"
-//           sub="All online"
-//           color="bg-rose-500"
-//         />
-//       </div>
-
-//       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-//         <Card className="lg:col-span-2 p-5">
-//           <div className="flex items-center justify-between mb-4">
-//             <h3 className="text-sm font-semibold text-foreground">
-//               Revenue Trend (6 months)
-//             </h3>
-//             <Select className="w-36 text-xs py-1">
-//               <option>All Branches</option>
-//               <option>Aguda Branch</option>
-//               <option>Bode Thomas Branch</option>
-//             </Select>
-//           </div>
-//           <ResponsiveContainer width="100%" height={220}>
-//             <LineChart data={revenueData}>
-//               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-//               <XAxis
-//                 dataKey="month"
-//                 tick={{ fontSize: 11 }}
-//                 stroke="var(--border)"
-//               />
-//               <YAxis
-//                 tick={{ fontSize: 11 }}
-//                 stroke="var(--border)"
-//                 tickFormatter={(v) => `${(v / 20000).toFixed(0)}k`}
-//               />
-//               <Tooltip formatter={(v) => `₦${v.toLocaleString()}`} />
-//               <Legend wrapperStyle={{ fontSize: 11 }} />
-//               <Line
-//                 dataKey="Aguda"
-//                 stroke="#1a6bcc"
-//                 strokeWidth={2}
-//                 dot={false}
-//               />
-//               <Line
-//                 dataKey="BodeThomas"
-//                 stroke="#7c3aed"
-//                 strokeWidth={2}
-//                 dot={false}
-//               />
-//             </LineChart>
-//           </ResponsiveContainer>
-//         </Card>
-//         <Card className="p-5">
-//           <h3 className="text-sm font-semibold text-foreground mb-4">
-//             Tests by Category
-//           </h3>
-//           <Select className="w-16 text-xs py-1">
-//             <option>All Branches</option>
-//             <option>Aguda Branch</option>
-//             <option>Bode Thomas Branch</option>
-//           </Select>
-//           <ResponsiveContainer width="100%" height={220}>
-//             <PieChart>
-//               <Pie
-//                 data={testsByCategoryData}
-//                 cx="50%"
-//                 cy="50%"
-//                 innerRadius={55}
-//                 outerRadius={85}
-//                 dataKey="value"
-//                 paddingAngle={3}
-//               >
-//                 {testsByCategoryData.map((_, i) => (
-//                   <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-//                 ))}
-//               </Pie>
-//               <Tooltip />
-//             </PieChart>
-//           </ResponsiveContainer>
-//           <div className="mt-2 space-y-1">
-//             {testsByCategoryData.map((d, i) => (
-//               <div
-//                 key={d.name}
-//                 className="flex items-center justify-between text-xs"
-//               >
-//                 <div className="flex items-center gap-1.5">
-//                   <span
-//                     className="w-2 h-2 rounded-full"
-//                     style={{ background: PIE_COLORS[i] }}
-//                   />
-//                   <span className="text-muted-foreground">{d.name}</span>
-//                 </div>
-//                 <span className="font-medium">{d.value}%</span>
-//               </div>
-//             ))}
-//           </div>
-//         </Card>
-//       </div>
-
-//       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-//         <Card className="p-5">
-//           <h3 className="text-sm font-semibold text-foreground mb-4">
-//             Tests This Week
-//           </h3>
-//           <ResponsiveContainer width="100%" height={180}>
-//             <BarChart data={testsByDayData} barSize={24}>
-//               <CartesianGrid
-//                 strokeDasharray="3 3"
-//                 stroke="var(--border)"
-//                 vertical={false}
-//               />
-//               <CartesianGrid
-//                 strokeDasharray=" 3"
-//                 stroke="var(--border)"
-//                 vertical={false}
-//               />
-//               <XAxis
-//                 dataKey="day"
-//                 tick={{ fontSize: 11 }}
-//                 stroke="var(--border)"
-//               />
-//               <YAxis tick={{ fontSize: 11 }} stroke="var(--border)" />
-//               <Tooltip />
-//               <Bar dataKey="tests" fill="#1a6bcc" radius={[4, 4, 0, 0]} />
-//               <Bar dataKey="tests" fill="#7c3aed" radius={[4, 4, 0, 0]} />
-//               <Legend wrapperStyle={{ fontSize: 11 }} />
-//               <Line
-//                 dataKey="Aguda"
-//                 stroke="#1a6bcc"
-//                 strokeWidth={2}
-//                 dot={false}
-//               />
-//               <Line
-//                 dataKey="BodeThomas"
-//                 stroke="#7c3aed"
-//                 strokeWidth={2}
-//                 dot={false}
-//               />
-//             </BarChart>
-//           </ResponsiveContainer>
-//         </Card>
-//         <Card className="p-5">
-//           <div className="flex items-center justify-between mb-4">
-//             <h3 className="text-sm font-semibold text-foreground">
-//               Centre Comparison
-//             </h3>
-//           </div>
-//           <div className="space-y-3">
-//             {CENTRES.map((c) => (
-//               <div key={c.id} className="flex items-center gap-3">
-//                 <div className="w-24 text-xs text-muted-foreground truncate">
-//                   {c.name.replace("MedLab ", "")}
-//                 </div>
-//                 <div className="flex-1 bg-muted rounded-full h-2">
-//                   <div
-//                     className="h-2 rounded-full bg-primary"
-//                     style={{ width: `${(c.patientsToday / 60) * 100}%` }}
-//                   />
-//                 </div>
-//                 <div className="w-8 text-xs font-medium text-right">
-//                   {c.patientsToday}
-//                 </div>
-//                 <StatusBadge status={c.status} />
-//               </div>
-//             ))}
-//           </div>
-//           <div className="mt-4 pt-3 border-t border-border">
-//             <p className="text-xs text-muted-foreground">
-//               Today's patient arrivals across centres
-//             </p>
-//           </div>
-//         </Card>
-//       </div>
-//     </div>
-//   );
-// }
-
-// export function UsersScreen() {
-//   const [search, setSearch] = useState("");
-//   const [showAdd, setShowAdd] = useState(false);
-//   const [showDeactivate, setShowDeactivate] = useState(null);
-//   const [alert, setAlert] = useState(null);
-//   const filtered = USERS.filter(
-//     (u) =>
-//       u.name.toLowerCase().includes(search.toLowerCase()) ||
-//       u.email.includes(search),
-//   );
-//   const roleBadge = {
-//     admin: "danger",
-//     receptionist: "info",
-//     phlebotomist: "teal",
-//     lab_tech: "warning",
-//     radiographer: "success",
-//   };
-//   return (
-//     <div className="p-6 space-y-4">
-//       {alert && (
-//         <Alert type="success" message={alert} onClose={() => setAlert(null)} />
-//       )}
-//       <div className="flex items-center justify-between gap-4">
-//         <div className="w-80">
-//           <SearchBar
-//             value={search}
-//             onChange={setSearch}
-//             placeholder="Search users…"
-//           />
-//         </div>
-//         <Btn variant="primary" size="sm" onClick={() => setShowAdd(true)}>
-//           <Plus className="w-3.5 h-3.5" />
-//           Add User
-//         </Btn>
-//       </div>
-//       <Card>
-//         <Table
-//           headers={["Name", "Email", "Role", "Centre", "Status", "Actions"]}
-//         >
-//           {filtered.map((u) => (
-//             <tr key={u.id} className="hover:bg-muted/30 transition-colors">
-//               <td className="px-4 py-3">
-//                 <div className="flex items-center gap-2">
-//                   <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-primary">
-//                     {u.name
-//                       .split(" ")
-//                       .map((n) => n[0])
-//                       .slice(0, 2)
-//                       .join("")}
-//                   </div>
-//                   <span className="text-sm font-medium">{u.name}</span>
-//                 </div>
-//               </td>
-//               <td className="px-4 py-3 text-sm text-muted-foreground">
-//                 {u.email}
-//               </td>
-//               <td className="px-4 py-3">
-//                 <Badge variant={roleBadge[u.role]}>
-//                   {u.role.replace("_", " ")}
-//                 </Badge>
-//               </td>
-//               <td className="px-4 py-3 text-sm text-muted-foreground">
-//                 {u.centre}
-//               </td>
-//               <td className="px-4 py-3">
-//                 <StatusBadge status={u.status} />
-//               </td>
-//               <td className="px-4 py-3">
-//                 <div className="flex gap-1">
-//                   <Btn variant="ghost" size="sm">
-//                     <Edit2 className="w-3.5 h-3.5" />
-//                   </Btn>
-//                   <Btn
-//                     variant="ghost"
-//                     size="sm"
-//                     onClick={() => setShowDeactivate(u)}
-//                   >
-//                     <XCircle className="w-3.5 h-3.5 text-red-400" />
-//                   </Btn>
-//                 </div>
-//               </td>
-//             </tr>
-//           ))}
-//         </Table>
-//       </Card>
-
-//       {showAdd && (
-//         <Modal title="Add New User" onClose={() => setShowAdd(false)}>
-//           <div className="space-y-4">
-//             <div className="grid grid-cols-2 gap-3">
-//               <FormField label="First Name" required>
-//                 <Input placeholder="First name" />
-//               </FormField>
-//               <FormField label="Last Name" required>
-//                 <Input placeholder="Last name" />
-//               </FormField>
-//             </div>
-//             <FormField label="Email" required>
-//               <Input type="email" placeholder="user@medlab.co.ke" />
-//             </FormField>
-//             <FormField label="Role" required>
-//               <Select>
-//                 <option>receptionist</option>
-//                 <option>phlebotomist</option>
-//                 <option>lab_tech</option>
-//                 <option>radiographer</option>
-//                 <option>admin</option>
-//               </Select>
-//             </FormField>
-//             <FormField label="Centre" required>
-//               <Select>
-//                 {CENTRES.map((c) => (
-//                   <option key={c.id}>{c.name}</option>
-//                 ))}
-//               </Select>
-//             </FormField>
-//             <FormField label="Temporary Password" required>
-//               <Input type="password" placeholder="••••••••" />
-//             </FormField>
-//             <div className="flex justify-end gap-3">
-//               <Btn variant="secondary" onClick={() => setShowAdd(false)}>
-//                 Cancel
-//               </Btn>
-//               <Btn
-//                 variant="primary"
-//                 onClick={() => {
-//                   setShowAdd(false);
-//                   setAlert(
-//                     "User created successfully. A welcome email has been sent.",
-//                   );
-//                 }}
-//               >
-//                 Create User
-//               </Btn>
-//             </div>
-//           </div>
-//         </Modal>
-//       )}
-
-//       {showDeactivate && (
-//         <Modal title="Deactivate User" onClose={() => setShowDeactivate(null)}>
-//           <div className="space-y-4">
-//             <Alert
-//               type="warning"
-//               message={`You are about to deactivate ${showDeactivate.name}. They will lose access immediately.`}
-//             />
-//             <p className="text-sm text-muted-foreground">
-//               This action can be reversed by reactivating the user from the
-//               users table.
-//             </p>
-//             <div className="flex justify-end gap-3">
-//               <Btn variant="secondary" onClick={() => setShowDeactivate(null)}>
-//                 Cancel
-//               </Btn>
-//               <Btn
-//                 variant="danger"
-//                 onClick={() => {
-//                   setShowDeactivate(null);
-//                   setAlert(`${showDeactivate.name} has been deactivated.`);
-//                 }}
-//               >
-//                 Deactivate
-//               </Btn>
-//             </div>
-//           </div>
-//         </Modal>
-//       )}
-//     </div>
-//   );
-// }
-
-// export function CentresScreen() {
-//   const [showAdd, setShowAdd] = useState(false);
-//   return (
-//     <div className="p-6 space-y-4">
-//       <div className="flex justify-end">
-//         <Btn variant="primary" size="sm" onClick={() => setShowAdd(true)}>
-//           <Plus className="w-3.5 h-3.5" />
-//           Add Centre
-//         </Btn>
-//       </div>
-//       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-//         {CENTRES.map((c) => (
-//           <Card key={c.id} className="p-5">
-//             <div className="flex items-start justify-between mb-3">
-//               <div className="flex items-center gap-3">
-//                 <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
-//                   <Building2 className="w-5 h-5 text-primary" />
-//                 </div>
-//                 <div>
-//                   <h3 className="text-sm font-semibold">{c.name}</h3>
-//                   <p className="text-xs text-muted-foreground flex items-center gap-1">
-//                     {c.city}
-//                   </p>
-//                 </div>
-//               </div>
-//               <StatusBadge status={c.status} />
-//             </div>
-//             <div className="space-y-1.5 text-sm">
-//               <div className="flex items-center gap-2 text-muted-foreground">
-//                 {c.phone}
-//               </div>
-//               <div className="flex items-center gap-2 text-muted-foreground">
-//                 {c.email}
-//               </div>
-//               <div className="flex items-center gap-2 text-muted-foreground">
-//                 {c.manager}
-//               </div>
-//             </div>
-//             <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-//               <div className="text-sm">
-//                 <span className="font-semibold text-primary">
-//                   {c.patientsToday}
-//                 </span>{" "}
-//                 <span className="text-muted-foreground">patients today</span>
-//               </div>
-//               <div className="flex gap-1">
-//                 <Btn variant="ghost" size="sm">
-//                   <Edit2 className="w-3.5 h-3.5" />
-//                 </Btn>
-//                 <Btn variant="ghost" size="sm">
-//                   <Settings className="w-3.5 h-3.5" />
-//                 </Btn>
-//               </div>
-//             </div>
-//           </Card>
-//         ))}
-//       </div>
-//       {showAdd && (
-//         <Modal title="Add Centre" onClose={() => setShowAdd(false)}>
-//           <div className="space-y-4">
-//             <FormField label="Centre Name" required>
-//               <Input placeholder="e.g. MedLab Karen" />
-//             </FormField>
-//             <div className="grid grid-cols-2 gap-3">
-//               <FormField label="City" required>
-//                 <Input placeholder="e.g. Nairobi" />
-//               </FormField>
-//               <FormField label="Phone" required>
-//                 <Input placeholder="+254 20 XXX XXXX" />
-//               </FormField>
-//             </div>
-//             <FormField label="Email">
-//               <Input type="email" placeholder="centre@medlab.co.ke" />
-//             </FormField>
-//             <FormField label="Manager">
-//               <Select>
-//                 {USERS.map((u) => (
-//                   <option key={u.id}>{u.name}</option>
-//                 ))}
-//               </Select>
-//             </FormField>
-//             <div className="flex justify-end gap-3">
-//               <Btn variant="secondary" onClick={() => setShowAdd(false)}>
-//                 Cancel
-//               </Btn>
-//               <Btn variant="primary">Create Centre</Btn>
-//             </div>
-//           </div>
-//         </Modal>
-//       )}
-//     </div>
-//   );
-// }
-
-// export function AuditLogsScreen() {
-//   const [search, setSearch] = useState("");
-//   const filtered = AUDIT_LOGS.filter(
-//     (a) =>
-//       a.user.toLowerCase().includes(search.toLowerCase()) ||
-//       a.action.includes(search) ||
-//       a.entity.includes(search),
-//   );
-//   return (
-//     <div className="p-6 space-y-4">
-//       <div className="flex items-center gap-4">
-//         <div className="w-80">
-//           <SearchBar
-//             value={search}
-//             onChange={setSearch}
-//             placeholder="Search logs…"
-//           />
-//         </div>
-//         <Select className="w-40">
-//           <option>All Actions</option>
-//           <option>Created</option>
-//           <option>Updated</option>
-//           <option>Deleted</option>
-//           <option>Uploaded</option>
-//         </Select>
-//         <Select className="w-40">
-//           <option>All Centres</option>
-//           {CENTRES.map((c) => (
-//             <option key={c.id}>{c.name}</option>
-//           ))}
-//         </Select>
-//       </div>
-//       <Card>
-//         <Table
-//           headers={[
-//             "User",
-//             "Action",
-//             "Entity",
-//             "Entity ID",
-//             "Centre",
-//             "Date",
-//             "Time",
-//           ]}
-//         >
-//           {filtered.map((a) => (
-//             <tr key={a.id} className="hover:bg-muted/30 transition-colors">
-//               <td className="px-4 py-3 text-sm font-medium">{a.user}</td>
-//               <td className="px-4 py-3">
-//                 <Badge
-//                   variant={
-//                     a.action === "Created"
-//                       ? "success"
-//                       : a.action === "Deleted"
-//                         ? "danger"
-//                         : a.action === "Uploaded"
-//                           ? "teal"
-//                           : "info"
-//                   }
-//                 >
-//                   {a.action}
-//                 </Badge>
-//               </td>
-//               <td className="px-4 py-3 text-sm">{a.entity}</td>
-//               <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-//                 {a.entityId}
-//               </td>
-//               <td className="px-4 py-3 text-sm text-muted-foreground">
-//                 {a.centre}
-//               </td>
-//               <td className="px-4 py-3 text-sm text-muted-foreground">
-//                 {a.date}
-//               </td>
-//               <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-//                 {a.time}
-//               </td>
-//             </tr>
-//           ))}
-//         </Table>
-//       </Card>
-//     </div>
-//   );
-// }
-
-// export function ReportsScreen() {
-//   const [tab, setTab] = useState("revenue");
-//   const tabs = [
-//     { id: "revenue", label: "Revenue" },
-//     { id: "patients", label: "Patients" },
-//     { id: "staff", label: "Staff Performance" },
-//     { id: "centres", label: "Centre Comparison" },
-//   ];
-//   return (
-//     <div className="p-6 space-y-5">
-//       <div className="flex gap-1 bg-muted p-1 rounded-lg w-fit">
-//         {tabs.map((t) => (
-//           <button
-//             key={t.id}
-//             onClick={() => setTab(t.id)}
-//             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === t.id ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-//           >
-//             {t.label}
-//           </button>
-//         ))}
-//       </div>
-
-//       {tab === "revenue" && (
-//         <div className="space-y-4">
-//           <div className="grid grid-cols-3 gap-4">
-//             <StatCard
-//               icon={DollarSign}
-//               label="Total Revenue (YTD)"
-//               value="₦2.4M"
-//               color="bg-blue-500"
-//             />
-//             <StatCard
-//               icon={TrendingUp}
-//               label="Growth vs Last Year"
-//               value="+18.4%"
-//               color="bg-teal-500"
-//             />
-//             <StatCard
-//               icon={Activity}
-//               label="Avg. Monthly Revenue"
-//               value="₦392K"
-//               color="bg-violet-500"
-//             />
-//           </div>
-//           <Card className="p-5">
-//             <div className="flex items-center justify-between mb-4">
-//               <h3 className="text-sm font-semibold">
-//                 Monthly Revenue by Centre
-//               </h3>
-//               <div className="flex gap-2">
-//                 <Btn variant="secondary" size="sm">
-//                   <Download className="w-3.5 h-3.5" />
-//                   Export CSV
-//                 </Btn>
-//               </div>
-//             </div>
-//             <ResponsiveContainer width="100%" height={280}>
-//               <BarChart data={revenueData}>
-//                 <CartesianGrid
-//                   strokeDasharray="3 3"
-//                   stroke="var(--border)"
-//                   vertical={false}
-//                 />
-//                 <XAxis
-//                   dataKey="month"
-//                   tick={{ fontSize: 11 }}
-//                   stroke="var(--border)"
-//                 />
-//                 <YAxis
-//                   tick={{ fontSize: 11 }}
-//                   stroke="var(--border)"
-//                   tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
-//                 />
-//                 <Tooltip formatter={(v) => `₦${v.toLocaleString()}`} />
-//                 <Legend wrapperStyle={{ fontSize: 11 }} />
-//                 <Bar
-//                   dataKey="Aguda"
-//                   fill="#1a6bcc"
-//                   radius={[4, 4, 0, 0]}
-//                   stackId="a"
-//                 />
-//                 <Bar
-//                   dataKey="Bode Thomas"
-//                   fill="#7c3aed"
-//                   radius={[4, 4, 0, 0]}
-//                   stackId="b"
-//                 />
-//               </BarChart>
-//             </ResponsiveContainer>
-//           </Card>
-//         </div>
-//       )}
-
-//       {tab === "patients" && (
-//         <Card className="p-5">
-//           <h3 className="text-sm font-semibold mb-4">
-//             Patient Registration Trend
-//           </h3>
-//           <Table
-//             headers={["Centre", "New Patients", "Total Patients", "% Growth"]}
-//           >
-//             {CENTRES.map((c) => (
-//               <tr key={c.id} className="hover:bg-muted/30">
-//                 <td className="px-4 py-3 text-sm font-medium">{c.name}</td>
-//                 <td className="px-4 py-3 text-sm">{c.patientsToday * 8}</td>
-//                 <td className="px-4 py-3 text-sm">{c.patientsToday * 42}</td>
-//                 <td className="px-4 py-3">
-//                   <Badge variant="success">
-//                     +{(Math.random() * 20 + 5).toFixed(1)}%
-//                   </Badge>
-//                 </td>
-//               </tr>
-//             ))}
-//           </Table>
-//         </Card>
-//       )}
-
-//       {tab === "staff" && (
-//         <Card className="p-5">
-//           <h3 className="text-sm font-semibold mb-4">
-//             Staff Performance This Month
-//           </h3>
-//           <Table
-//             headers={[
-//               "Staff Member",
-//               "Role",
-//               "Tests Processed",
-//               "Orders Created",
-//               "Avg TAT",
-//             ]}
-//           >
-//             {USERS.map((u) => (
-//               <tr key={u.id} className="hover:bg-muted/30">
-//                 <td className="px-4 py-3 text-sm font-medium">{u.name}</td>
-//                 <td className="px-4 py-3">
-//                   <Badge variant="info">{u.role.replace("_", " ")}</Badge>
-//                 </td>
-//                 <td className="px-4 py-3 text-sm">
-//                   {Math.floor(Math.random() * 80 + 20)}
-//                 </td>
-//                 <td className="px-4 py-3 text-sm">
-//                   {Math.floor(Math.random() * 50 + 10)}
-//                 </td>
-//                 <td className="px-4 py-3 text-sm">
-//                   {(Math.random() * 3 + 2).toFixed(1)} hrs
-//                 </td>
-//               </tr>
-//             ))}
-//           </Table>
-//         </Card>
-//       )}
-
-//       {tab === "centres" && (
-//         <Card className="p-5">
-//           <h3 className="text-sm font-semibold mb-4">
-//             Centre Performance Comparison
-//           </h3>
-//           <ResponsiveContainer width="100%" height={280}>
-//             <BarChart
-//               data={CENTRES.map((c) => ({
-//                 name: c.name.replace("MedLab ", ""),
-//                 patients: c.patientsToday,
-//                 revenue: c.patientsToday * 800,
-//               }))}
-//               barSize={32}
-//             >
-//               <CartesianGrid
-//                 strokeDasharray="3 3"
-//                 stroke="var(--border)"
-//                 vertical={false}
-//               />
-//               <XAxis
-//                 dataKey="name"
-//                 tick={{ fontSize: 11 }}
-//                 stroke="var(--border)"
-//               />
-//               <YAxis tick={{ fontSize: 11 }} stroke="var(--border)" />
-//               <Tooltip />
-//               <Bar
-//                 dataKey="patients"
-//                 fill="#1a6bcc"
-//                 radius={[4, 4, 0, 0]}
-//                 name="Patients Today"
-//               />
-//             </BarChart>
-//           </ResponsiveContainer>
-//         </Card>
-//       )}
-//     </div>
-//   );
-// }
-
-// export function SettingsScreen() {
-//   return (
-//     <div className="p-6 space-y-5 max-w-2xl">
-//       <Card className="p-5 space-y-4">
-//         <h3 className="text-sm font-semibold border-b border-border pb-2">
-//           General Settings
-//         </h3>
-//         <FormField label="Organisation Name">
-//           <Input defaultValue="Foundation Medical Diagnostic Lab" />
-//         </FormField>
-//         <FormField label="Default Currency">
-//           <Select>
-//             <option>N — Nigerian Naira</option>
-//             <option>USD — US Dollar</option>
-//           </Select>
-//         </FormField>
-//       </Card>
-//       <Card className="p-5 space-y-4">
-//         <h3 className="text-sm font-semibold border-b border-border pb-2">
-//           Notification Settings
-//         </h3>
-//         {[
-//           "Email alerts for new orders",
-//           "SMS on sample collection",
-//           "Notify patient on result ready",
-//           "Daily revenue summary to admin",
-//         ].map((s) => (
-//           <div key={s} className="flex items-center justify-between">
-//             <span className="text-sm">{s}</span>
-//             <button className="w-10 h-5 rounded-full bg-primary transition-colors relative flex-shrink-0">
-//               <span className="w-4 h-4 rounded-full bg-white absolute right-0.5 top-0.5 shadow-sm" />
-//             </button>
-//           </div>
-//         ))}
-//       </Card>
-//       <div className="flex justify-end">
-//         <Btn variant="primary">
-//           <CheckCircle className="w-3.5 h-3.5" />
-//           Save Settings
-//         </Btn>
-//       </div>
-//     </div>
-//   );
-// }
-
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { api } from "../lib/api";
 import {
   DollarSign,
   TrendingUp,
@@ -958,105 +102,127 @@ const getLast6Months = () => {
 export function DashboardScreen({ onNavigate }) {
   const [revenueBranch, setRevenueBranch] = useState("all");
   const [categoryBranch, setCategoryBranch] = useState("all");
+  const [liveData, setLiveData] = useState(null);
+  const [subscription, setSubscription] = useState(null);
 
-  const last6Months = useMemo(() => getLast6Months(), []);
+  useEffect(() => {
+    let cancelled = false;
+    api.dashboard()
+      .then((res) => {
+        if (!cancelled && res?.data?.dashboard) {
+          setLiveData(res.data.dashboard);
+        }
+      })
+      .catch(() => {});
 
-  // Filter 6-month revenue trend dynamically based on login date & branch selection
-  const filteredRevenueData = useMemo(() => {
-    return last6Months.map((month) => {
-      const match = revenueData.find((r) => r.month === month) || {
-        month,
-        Aguda: 1200000,
-        BodeThomas: 950000,
+    api.mySubscription()
+      .then((res) => {
+        if (!cancelled && res?.data?.subscription) {
+          setSubscription(res.data.subscription);
+        }
+      })
+      .catch(() => {});
+
+    return () => { cancelled = true; };
+  }, []);
+
+  const stats = useMemo(() => {
+    if (liveData?.stats) {
+      const s = liveData.stats;
+      return {
+        totalRevenue: `₦${Number(s.totalRevenue || 0).toLocaleString()}`,
+        todayRevenue: `₦${Number(s.todayRevenue || 0).toLocaleString()}`,
+        totalPatients: (s.totalPatients || 0).toLocaleString(),
+        newPatientsThisMonth: s.newPatientsThisMonth || 0,
+        testsCompleted: s.completedOrdersThisMonth || 0,
+        pendingTests: s.pendingOrders || 0,
+        activeCentres: `${s.activeBranches} / ${s.totalBranches}`,
       };
-
-      if (revenueBranch === "aguda") {
-        return { month, Aguda: match.Aguda };
-      }
-      if (revenueBranch === "bodethomas") {
-        return { month, BodeThomas: match.BodeThomas };
-      }
-      return { month, Aguda: match.Aguda, BodeThomas: match.BodeThomas };
-    });
-  }, [revenueBranch, last6Months]);
-
-  // Dynamic pie chart category data based on selected branch
-  const filteredCategoryData = useMemo(() => {
-    if (categoryBranch === "aguda") {
-      return testsByCategoryData.map((d) => ({
-        ...d,
-        value: Math.round(d.value * 0.55),
-      }));
     }
-    if (categoryBranch === "bodethomas") {
-      return testsByCategoryData.map((d) => ({
-        ...d,
-        value: Math.round(d.value * 0.45),
-      }));
-    }
-    return testsByCategoryData;
-  }, [categoryBranch]);
+    return {
+      totalRevenue: "₦20.4M",
+      todayRevenue: "₦311,100",
+      totalPatients: "4,821",
+      newPatientsThisMonth: 106,
+      testsCompleted: 247,
+      pendingTests: 18,
+      activeCentres: "2 / 2",
+    };
+  }, [liveData]);
 
-  // Daily test carried out by centre (last 7 days)
-  const filteredTestsByDayData = useMemo(() => {
-    return testsByDayData.map((d) => ({
-      ...d,
-      Aguda: d.Aguda || Math.floor(Math.random() * 20 + 10),
-      BodeThomas: d.BodeThomas || Math.floor(Math.random() * 15 + 5),
-    }));
-  }, []);
-
-  // Center Comparison data on the day
-  const centreComparison = useMemo(() => {
-    return CENTRES.map((c) => ({
-      ...c,
-      patientsToday: c.patientsToday || (c.id === "1" ? 42 : 35),
-    }));
-  }, []);
+  const naira = (n) => `₦${Number(n || 0).toLocaleString()}`;
 
   return (
     <div className="p-6 space-y-6">
+      {/* Subscription Status Banner (Phase 7) */}
+      {subscription && (
+        <Card className="p-4 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded font-semibold text-white">
+                {subscription.plan} Plan ({subscription.billingCycle})
+              </span>
+              <StatusBadge status={subscription.liveStatus?.toLowerCase() || subscription.status?.toLowerCase()} />
+            </div>
+            <p className="text-sm text-blue-100">
+              Renews: {subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).toLocaleDateString() : "Active"} ·
+              Usage: {subscription.branchesUsed ?? 1}/{subscription.maxBranches} Branches · {subscription.usersUsed ?? 1}/{subscription.maxUsers} Staff Seats
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-lg font-bold">{naira(subscription.amount)}</p>
+            {subscription.daysRemaining != null && (
+              <p className="text-xs text-blue-200">
+                {subscription.daysRemaining > 0
+                  ? `${subscription.daysRemaining} days remaining in cycle`
+                  : "Renewal due"}
+              </p>
+            )}
+          </div>
+        </Card>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard
           icon={DollarSign}
           label="Total Revenue"
-          value="₦20.4M"
+          value={stats.totalRevenue}
           sub="All centres · All time"
           color="bg-blue-500"
         />
         <StatCard
           icon={TrendingUp}
           label="Today's Revenue"
-          value="₦311,100"
-          sub="+12% vs yesterday"
+          value={stats.todayRevenue}
+          sub="Live transaction total"
           color="bg-teal-500"
         />
         <StatCard
           icon={Users}
           label="Total Patients"
-          value="4,821"
-          sub="106 new this month"
+          value={stats.totalPatients}
+          sub={`${stats.newPatientsThisMonth} new this month`}
           color="bg-violet-500"
         />
         <StatCard
           icon={CheckCircle}
           label="Tests Completed"
-          value="247"
+          value={stats.testsCompleted}
           sub="This month"
           color="bg-emerald-500"
         />
         <StatCard
           icon={Clock}
           label="Pending Tests"
-          value="18"
+          value={stats.pendingTests}
           sub="Across all centres"
           color="bg-amber-500"
         />
         <StatCard
           icon={Building2}
           label="Active Centres"
-          value="2 / 2"
-          sub="All online"
+          value={stats.activeCentres}
+          sub="Online & active"
           color="bg-rose-500"
         />
       </div>
@@ -2038,6 +1204,27 @@ export function UsersScreen() {
   const [showDeactivate, setShowDeactivate] = useState(null);
   const [alert, setAlert] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
+
+  const loadUsers = () => {
+    api.listUsers()
+      .then((res) => {
+        if (res?.data?.users && res.data.users.length > 0) {
+          setUsers(res.data.users.map((u) => ({
+            id: u.id,
+            name: `${u.firstName} ${u.lastName}`,
+            email: u.email,
+            role: u.roles?.[0]?.key?.toLowerCase() || "receptionist",
+            centre: u.branch?.name || "Head Office",
+            status: u.status.toLowerCase(),
+          })));
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
 
   const filtered = users.filter(
     (u) =>

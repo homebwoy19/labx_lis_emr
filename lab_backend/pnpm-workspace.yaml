@@ -1,0 +1,14 @@
+# pnpm build-script approvals (pnpm v10+).
+# Only trusted packages that genuinely need install/build scripts are allowed:
+#   - Prisma: generates the typed client and downloads its query engine
+#   - argon2: compiles/loads its native password-hashing binding
+#   - puppeteer: downloads the headless Chromium used for PDF rendering
+# Telemetry (@scarf/scarf) and the optional msgpackr accelerator stay blocked.
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@scarf/scarf': false
+  argon2: true
+  msgpackr-extract: false
+  prisma: true
+  puppeteer: true
