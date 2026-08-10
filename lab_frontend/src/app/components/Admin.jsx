@@ -150,6 +150,34 @@ export function DashboardScreen({ onNavigate }) {
     };
   }, [liveData]);
 
+  const months = useMemo(() => getLast6Months(), []);
+
+  const filteredRevenueData = useMemo(() => {
+    if (liveData?.revenueTrend) return liveData.revenueTrend;
+    return revenueData.map((d, idx) => ({
+      ...d,
+      month: months[idx] || d.month,
+    }));
+  }, [liveData, months]);
+
+  const filteredCategoryData = useMemo(() => {
+    if (liveData?.testsByCategory) return liveData.testsByCategory;
+    return testsByCategoryData;
+  }, [liveData]);
+
+  const filteredTestsByDayData = useMemo(() => {
+    if (liveData?.testsByDay) return liveData.testsByDay;
+    return testsByDayData;
+  }, [liveData]);
+
+  const centreComparison = useMemo(() => {
+    if (liveData?.centres) return liveData.centres;
+    return [
+      { id: "aguda", name: "Aguda Centre", code: "AGD", testsToday: 42, patientsToday: 28, capacityUtil: 75, status: "ACTIVE" },
+      { id: "bodethomas", name: "Bode Thomas Centre", code: "BDT", testsToday: 36, patientsToday: 22, capacityUtil: 60, status: "ACTIVE" },
+    ];
+  }, [liveData]);
+
   const naira = (n) => `₦${Number(n || 0).toLocaleString()}`;
 
   return (

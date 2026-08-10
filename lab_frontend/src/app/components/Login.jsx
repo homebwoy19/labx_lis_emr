@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { HeartPulse, RefreshCw, ShieldCheck } from "lucide-react";
+import { HeartPulse, RefreshCw, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { Card, FormField, Input, Alert, Btn } from "./UIComponents";
 import { useAuth } from "../auth/AuthContext";
 import { api } from "../lib/api";
@@ -20,6 +20,7 @@ export function LoginScreen({ mode = "tenant", tenant = null, onSuccess }) {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [screen, setScreen] = useState("login");
@@ -88,14 +89,29 @@ export function LoginScreen({ mode = "tenant", tenant = null, onSuccess }) {
               />
             </FormField>
             <FormField label="Password" required>
-              <Input
-                type="password"
-                autoComplete="current-password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
             </FormField>
             <div className="flex items-center justify-between text-sm">
               <label className="flex items-center gap-2 cursor-pointer">

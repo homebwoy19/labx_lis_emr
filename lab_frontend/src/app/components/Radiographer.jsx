@@ -83,7 +83,7 @@ export function RadiographerDashboard() {
             "Actions",
           ]}
         >
-          {imaging.map((item) => (
+          {filteredImaging.map((item) => (
             <tr key={item.id} className="hover:bg-muted/30 transition-colors">
               <td className="px-4 py-3 font-mono text-xs text-primary">
                 {item.orderId}

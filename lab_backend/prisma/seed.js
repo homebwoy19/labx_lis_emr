@@ -27,68 +27,47 @@ const prisma = new PrismaClient();
 
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "iamabdulwaasi19@gmail.com";
 const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || "HomeBwoy@225219";
-const DEMO_PASSWORD = process.env.SEED_PASSWORD || "ChangeMe@12345";
+const DEMO_PASSWORD = process.env.SEED_PASSWORD || "UsersLab@12345";
 
 /**
  * The two demo laboratories. Tenant identity (slug/acronym) lives in the DB and
  * is resolved at login time — never hard-coded in the app. Each roster provides
  * exactly one user per role so every dashboard is reachable.
  */
-const TENANTS = [
-  {
-    name: "Foundation Laboratory",
-    acronym: "FDN",
-    slug: "foundation",
-    email: "info@foundationlab.com",
-    domain: "foundationlab.com",
-    branch: { name: "Foundation Head Office", code: "HQ" },
-    subscription: { plan: "GROWTH", billingCycle: "MONTHLY" },
-    users: {
-      [ROLES.LAB_ADMIN]: { firstName: "Judith", lastName: "Obiorah", local: "judith.obiorah" },
-      [ROLES.RECEPTIONIST]: { firstName: "Grace", lastName: "Anyaoba", local: "grace.anyaoba" },
-      [ROLES.PHLEBOTOMIST]: { firstName: "Peter", lastName: "Okafor", local: "peter.okafor" },
-      [ROLES.LAB_SCIENTIST]: { firstName: "Amina", lastName: "Bello", local: "amina.bello" },
-      [ROLES.RADIOGRAPHER]: { firstName: "Samuel", lastName: "Eze", local: "samuel.eze" },
-    },
-  },
-  {
-    name: "MedLab Laboratory",
-    acronym: "MDL",
-    slug: "medlab",
-    email: "info@medlab.com",
-    domain: "medlab.com",
-    branch: { name: "MedLab Head Office", code: "HQ" },
-    subscription: { plan: "BASIC", billingCycle: "MONTHLY" },
-    users: {
-      [ROLES.LAB_ADMIN]: { firstName: "Daniel", lastName: "Adeyemi", local: "daniel.adeyemi" },
-      [ROLES.RECEPTIONIST]: { firstName: "Ngozi", lastName: "Chukwu", local: "ngozi.chukwu" },
-      [ROLES.PHLEBOTOMIST]: { firstName: "Ibrahim", lastName: "Sani", local: "ibrahim.sani" },
-      [ROLES.LAB_SCIENTIST]: { firstName: "Funke", lastName: "Ogunleye", local: "funke.ogunleye" },
-      [ROLES.RADIOGRAPHER]: { firstName: "Tunde", lastName: "Balogun", local: "tunde.balogun" },
-    },
-  },
-];
+const TENANTS = [];
 
 async function main() {
-  console.log("Seeding database…");
+  console.log("Seeding database… Cleaning existing demo data…");
+
+  // Clean demo data using valid Prisma model names
+  await prisma.auditLog.deleteMany({});
+  await prisma.notification.deleteMany({});
+  await prisma.document.deleteMany({});
+  await prisma.result.deleteMany({});
+  await prisma.sample.deleteMany({});
+  await prisma.testOrderItem.deleteMany({});
+  await prisma.testOrder.deleteMany({});
+  await prisma.payment.deleteMany({});
+  await prisma.patient.deleteMany({});
+  await prisma.test.deleteMany({});
+  await prisma.testCategory.deleteMany({});
+  await prisma.letterhead.deleteMany({});
+  await prisma.subscriptionHistory.deleteMany({});
+  await prisma.subscription.deleteMany({});
+  await prisma.refreshToken.deleteMany({});
+  await prisma.session.deleteMany({});
+  await prisma.userRole.deleteMany({});
+  await prisma.user.deleteMany({ where: { organizationId: { not: null } } });
+  await prisma.branch.deleteMany({});
+  await prisma.organization.deleteMany({});
 
   const permByKey = await seedPermissions();
   await seedSystemRoles(permByKey);
   await seedSuperAdmin();
-  for (const tenant of TENANTS) {
-    await seedTenant(tenant, permByKey);
-  }
 
-  console.log("\nSeed complete.\n");
+  console.log("\nSeed complete. Clean environment initialized.\n");
   console.log("Super Admin  (login at /super-admin):");
   console.log(`  ${SUPER_ADMIN_EMAIL} / ${SUPER_ADMIN_PASSWORD}`);
-  for (const tenant of TENANTS) {
-    console.log(`\n${tenant.name}  (login at /${tenant.slug}):`);
-    for (const [roleKey, u] of Object.entries(tenant.users)) {
-      const label = ROLE_METADATA[roleKey].name;
-      console.log(`  ${label.padEnd(20)} ${u.local}@${tenant.domain} / ${DEMO_PASSWORD}`);
-    }
-  }
 }
 
 /** Upserts every permission from the catalog; returns a key -> record map. */
