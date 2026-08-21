@@ -169,13 +169,13 @@ export function resolveAmountAndLimits(planKey, billingCycle, custom = {}) {
   }
 
   // Enterprise / custom pricing.
-  const amount = custom.amount;
-  if (amount === undefined || amount === null || Number.isNaN(Number(amount))) {
-    throw new Error("A custom amount is required for the Enterprise plan");
-  }
+  const amount =
+    custom.amount !== undefined && custom.amount !== null && !Number.isNaN(Number(custom.amount))
+      ? Number(custom.amount)
+      : planAmount(planKey, billingCycle);
 
   return {
-    isCustomPricing: true,
+    isCustomPricing: custom.amount !== undefined && custom.amount !== null,
     amount: Number(amount),
     maxBranches:
       custom.maxBranches != null ? Number(custom.maxBranches) : baseLimits.maxBranches,

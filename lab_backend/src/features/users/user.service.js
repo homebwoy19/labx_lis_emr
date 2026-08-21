@@ -61,22 +61,34 @@ export async function createUser(db, input, auth, reqContext) {
     throw ApiError.conflict("A user with this email already exists", { code: "EMAIL_EXISTS" });
   }
 
-  // Backend-enforced plan seat limit (§5). Rejects the create before any write.
-  await assertWithinUserLimit(db, auth.organizationId);
-
+  // Backend-enforced plan seat limit (§5). Hash the password before opening the
+  // transaction so the ~expensive Argon2 hash never holds the advisory lock.
   const passwordHash = await hashPassword(input.password);
 
-  const user = await repo.create(db, {
-    firstName: input.firstName,
-    lastName: input.lastName,
-    email: input.email,
-    phone: input.phone ?? null,
-    passwordHash,
-    status: "ACTIVE",
-    emailVerifiedAt: new Date(),
-    branchId,
-    createdBy: auth.userId,
-    roles: { create: { roleId: role.id } },
+  // The seat check + create run in ONE transaction, serialized per-organization
+  // with a Postgres advisory lock, so two concurrent creates can't both pass the
+  // check and exceed the plan. The lock is transaction-scoped (auto-released on
+  // commit/rollback) and pgBouncer-safe. We use the base client and stamp
+  // organizationId explicitly, so correctness never depends on the tenant
+  // extension firing inside the transaction.
+  const user = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`user-limit:${auth.organizationId}`}))`;
+
+    await assertWithinUserLimit(tx, auth.organizationId);
+
+    return repo.create(tx, {
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email,
+      phone: input.phone ?? null,
+      passwordHash,
+      status: "ACTIVE",
+      emailVerifiedAt: new Date(),
+      organizationId: auth.organizationId,
+      branchId,
+      createdBy: auth.userId,
+      roles: { create: { roleId: role.id } },
+    });
   });
 
   await writeAudit({
@@ -133,7 +145,21 @@ export async function updateUser(db, id, input, auth, reqContext) {
   }
 
   data.updatedBy = auth.userId;
-  const updated = await repo.update(db, id, data);
+
+  // Reactivating a deactivated user consumes a seat again, so it must pass the
+  // same race-safe seat check as creation. Ordinary edits skip the transaction.
+  const isReactivation = input.status === "ACTIVE" && existing.status !== "ACTIVE";
+
+  let updated;
+  if (isReactivation) {
+    updated = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`user-limit:${auth.organizationId}`}))`;
+      await assertWithinUserLimit(tx, auth.organizationId);
+      return repo.update(tx, id, data);
+    });
+  } else {
+    updated = await repo.update(db, id, data);
+  }
 
   await writeAudit({
     action: AUDIT_ACTIONS.USER_UPDATE,
@@ -200,7 +226,7 @@ export async function deleteUser(db, id, auth, reqContext) {
   const existing = await repo.findById(db, id);
   if (!existing) throw ApiError.notFound("User not found");
 
-  await repo.softDelete(db, id, auth.userId);
+  await repo.deactivate(db, id, auth.userId);
 
   await writeAudit({
     action: AUDIT_ACTIONS.USER_DELETE,

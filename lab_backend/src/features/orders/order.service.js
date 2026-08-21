@@ -160,6 +160,12 @@ export async function cancelOrder(db, id, reason, auth, reqContext) {
   if (existing.status === "RELEASED") {
     throw ApiError.conflict("A released order cannot be cancelled", { code: "ORDER_RELEASED" });
   }
+  // A completed order (all results approved) is terminal for cancellation — the
+  // work is done and, once released, handed to the patient. Enforced here on the
+  // server so a stale/tampered client cannot cancel past completion.
+  if (existing.status === "APPROVED") {
+    throw ApiError.conflict("A completed order cannot be cancelled", { code: "ORDER_COMPLETED" });
+  }
 
   const updated = await repo.update(db, id, { status: "CANCELLED", updatedBy: auth.userId });
 

@@ -25,7 +25,7 @@ const PUBLIC_SELECT = {
  */
 export async function findActiveBySlug(slug) {
   return prisma.organization.findFirst({
-    where: { slug: slug.toLowerCase(), status: "ACTIVE", deletedAt: null },
+    where: { slug: slug.toLowerCase(), deletedAt: null },
     select: PUBLIC_SELECT,
   });
 }

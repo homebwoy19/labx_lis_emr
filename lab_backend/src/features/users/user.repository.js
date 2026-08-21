@@ -86,11 +86,17 @@ export async function update(db, id, data) {
   return shapeUser(user);
 }
 
-export async function softDelete(db, id, deletedBy) {
+/**
+ * Deactivates a user: flips status to SUSPENDED (which blocks login and frees a
+ * subscription seat) while preserving the record and all historical data. This
+ * is intentionally NOT a soft delete — `deletedAt` stays null so the user
+ * remains visible in `list`/`findById` and can be reactivated later.
+ */
+export async function deactivate(db, id, updatedBy) {
   return db.user.update({
     where: { id },
-    data: { deletedAt: new Date(), deletedBy, status: "SUSPENDED" },
-    select: { id: true },
+    data: { status: "SUSPENDED", updatedBy },
+    select: { id: true, status: true },
   });
 }
 
@@ -135,7 +141,7 @@ export default {
   list,
   create,
   update,
-  softDelete,
+  deactivate,
   findRoleByKey,
   listRoles,
   findBranch,

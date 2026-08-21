@@ -79,9 +79,17 @@ function mapPrismaError(err) {
         statusCode: 409,
         code: "FOREIGN_KEY_CONSTRAINT",
         message: "Related record constraint failed",
+        details: err.meta,
       };
-    default:
-      return { statusCode: 400, code: "DATABASE_ERROR", message: "Database request failed" };
+    default: {
+      const cleanMsg = err.message ? err.message.split("\n").filter(Boolean).pop()?.trim() : null;
+      return {
+        statusCode: 400,
+        code: "DATABASE_ERROR",
+        message: cleanMsg || "Database request failed",
+        details: err.meta || { code: err.code },
+      };
+    }
   }
 }
 

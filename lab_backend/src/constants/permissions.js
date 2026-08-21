@@ -56,9 +56,14 @@ export const PERMISSIONS = {
   // Results
   RESULT_ENTER: "result:enter",
   RESULT_READ: "result:read",
+  // Receptionist types/edits the narrative report and submits it to the Lab
+  // Admin for approval (does NOT grant approval — that stays RESULT_APPROVE).
+  RESULT_PREPARE: "result:prepare",
   RESULT_APPROVE: "result:approve",
   RESULT_REJECT: "result:reject",
   RESULT_RELEASE: "result:release",
+  // Send an approved/released report to the patient's registered contact.
+  RESULT_SEND: "result:send",
 
   // Payments
   PAYMENT_CREATE: "payment:create",

@@ -76,6 +76,12 @@ export function LoginScreen({ mode = "tenant", tenant = null, onSuccess }) {
         </div>
 
         <Card className="p-6 space-y-4">
+          {tenant?.status === "SUSPENDED" && (
+            <Alert
+              type="warning"
+              message="This laboratory is currently suspended. Access is restricted until reactivated by the platform administrator."
+            />
+          )}
           {error && <Alert type="error" message={error} onClose={() => setError("")} />}
           <form className="space-y-4" onSubmit={handleLogin}>
             <FormField label="Email Address" required>

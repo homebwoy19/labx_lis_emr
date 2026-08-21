@@ -23,13 +23,41 @@ import * as repo from "./patient.repository.js";
 export async function createPatient(db, input, auth, reqContext) {
   const { organizationId, branchId, userId } = auth;
 
-  if (!organizationId || !branchId) {
-    // Only branch-scoped staff (e.g. receptionists) register patients. A
-    // platform/org-level actor has no branch to attach the patient to.
-    throw ApiError.badRequest(
-      "A branch context is required to register a patient",
-      { code: "BRANCH_CONTEXT_REQUIRED" },
-    );
+  if (!organizationId) {
+    throw ApiError.badRequest("An organization context is required to register a patient", {
+      code: "ORG_CONTEXT_REQUIRED",
+    });
+  }
+
+  // Resolve the branch the patient is registered under:
+  //   - Branch-scoped staff (e.g. receptionists) ALWAYS use their own branch;
+  //     any client-supplied branchId is ignored — they cannot register into
+  //     another branch.
+  //   - Organization-scoped Lab Admins have no implicit branch, so they MUST
+  //     name one. It is authorized against their organization through the
+  //     tenant-scoped client (which restricts the lookup to the caller's org),
+  //     so a foreign or non-existent branch resolves to null and is rejected.
+  //     Validation is never bypassed to silence the missing-branch error.
+  let effectiveBranchId = branchId;
+
+  if (!effectiveBranchId) {
+    if (!input.branchId) {
+      throw ApiError.badRequest(
+        "A branch is required to register a patient. Select the branch to register this patient under.",
+        { code: "BRANCH_CONTEXT_REQUIRED" },
+      );
+    }
+    const branch = await db.branch.findFirst({
+      where: { id: input.branchId, deletedAt: null, status: { not: "REJECTED" } },
+      select: { id: true },
+    });
+    if (!branch) {
+      throw ApiError.badRequest(
+        "The selected branch is invalid or does not belong to your laboratory",
+        { code: "INVALID_BRANCH" },
+      );
+    }
+    effectiveBranchId = branch.id;
   }
 
   // Atomic: increment the org's patient sequence and create the patient together.
@@ -38,7 +66,7 @@ export async function createPatient(db, input, auth, reqContext) {
     return tx.patient.create({
       data: {
         organizationId,
-        branchId,
+        branchId: effectiveBranchId,
         patientCode,
         firstName: input.firstName,
         lastName: input.lastName,

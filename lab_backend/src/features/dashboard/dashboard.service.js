@@ -35,7 +35,7 @@ async function getSuperAdminDashboard(db) {
   const [stats, growth, activity, pendingBranches, subscriptionStats] = await Promise.all([
     repo.platformStats(),
     repo.platformGrowth(6),
-    repo.platformActivity(15),
+    repo.platformActivity(50),
     repo.pendingBranchRequests(10),
     safeSubscriptionStats(db),
   ]);

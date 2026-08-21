@@ -1,6 +1,7 @@
 import { verifyAccessToken } from "../utils/tokens.js";
 import { ApiError } from "../core/ApiError.js";
 import { prisma } from "../core/prisma.js";
+import { ROLE_PERMISSIONS } from "../constants/roles.js";
 
 /**
  * Authenticate middleware — verifies the JWT access token and hydrates req.auth
@@ -87,6 +88,11 @@ async function hydrateUserContext(userId) {
   const permissionSet = new Set();
 
   for (const role of roles) {
+    if (role.key && ROLE_PERMISSIONS[role.key]) {
+      for (const p of ROLE_PERMISSIONS[role.key]) {
+        permissionSet.add(p);
+      }
+    }
     const perms = role.permissions || role.rolePermissions || [];
     for (const rp of perms) {
       if (rp.permission?.key) permissionSet.add(rp.permission.key);

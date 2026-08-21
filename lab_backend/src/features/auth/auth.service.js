@@ -206,29 +206,36 @@ export async function login({ email, password, slug, deviceId, deviceName }, con
   // rejected with the same generic error — never leaking cross-tenant accounts.
   await assertTenantAccess(user, slug, context, genericError);
 
-  // Successful auth — clear any failed-attempt counters.
-  await repo.updateUserLogin(user.id, {
-    failedLoginCount: 0,
-    lockedUntil: null,
-    lastLoginAt: new Date(),
-  });
-
   const resolvedDeviceId = resolveDeviceId(deviceId, context);
-  const session = await openSession(user, resolvedDeviceId, deviceName, context);
+
+  // Successful auth. Clearing the failed-attempt counters and opening the device
+  // session are two independent writes to different tables — run them
+  // concurrently to drop one sequential round-trip off the login path. (Security
+  // gates above — lockout, password, status, tenant — are untouched.)
+  const [, session] = await Promise.all([
+    repo.updateUserLogin(user.id, {
+      failedLoginCount: 0,
+      lockedUntil: null,
+      lastLoginAt: new Date(),
+    }),
+    openSession(user, resolvedDeviceId, deviceName, context),
+  ]);
 
   const accessToken = issueAccessToken(user, session.id);
   const refreshRaw = await issueRefreshToken(user.id, session.id);
 
   const { roles, permissions } = extractRolesAndPermissions(user);
 
-  await writeAudit({
+  // The success audit is not on the critical path — fire it without awaiting so
+  // it never adds latency to the response. Failures are logged, never surfaced.
+  writeAudit({
     action: AUDIT_ACTIONS.LOGIN,
     organizationId: user.organizationId,
     actorId: user.id,
     entityType: "User",
     entityId: user.id,
     context,
-  });
+  }).catch((err) => logger.error({ err, userId: user.id }, "login audit write failed"));
 
   return {
     user: toPublicUser(user, roles, permissions),

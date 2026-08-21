@@ -39,6 +39,20 @@ export const rejectResultSchema = {
   }),
 };
 
+export const prepareResultSchema = {
+  params: z.object({ id: z.string().uuid("Invalid result id") }),
+  body: z.object({
+    // The narrative report the receptionist types/edits onto the letterhead.
+    preparedReport: z.string().trim().max(20000).optional(),
+    // true → submit to the Lab Admin for approval (DRAFT → PENDING_APPROVAL).
+    submit: z.boolean().optional().default(false),
+  }),
+};
+
+export const sendOrderReportSchema = {
+  params: z.object({ orderId: z.string().uuid("Invalid order id") }),
+};
+
 export const resultIdParamSchema = {
   params: z.object({ id: z.string().uuid("Invalid result id") }),
 };
@@ -61,6 +75,8 @@ export const listResultsSchema = {
 export default {
   enterResultSchema,
   rejectResultSchema,
+  prepareResultSchema,
+  sendOrderReportSchema,
   resultIdParamSchema,
   releaseOrderSchema,
   listResultsSchema,

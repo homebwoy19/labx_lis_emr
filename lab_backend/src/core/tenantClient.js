@@ -21,6 +21,7 @@ const TENANT_MODELS = {
   Subscription: { org: true, branch: false },
   SubscriptionHistory: { org: true, branch: false },
   Document: { org: true, branch: false },
+  Letterhead: { org: true, branch: false },
   OrganizationSetting: { org: true, branch: false },
   Notification: { org: true, branch: false },
   AuditLog: { org: true, branch: false },

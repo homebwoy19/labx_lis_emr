@@ -55,7 +55,7 @@ export async function createOrganization(db, input, auth, reqContext) {
         status: "ACTIVE",
         createdBy: auth.userId,
       },
-      select: repo.PUBLIC_SELECT,
+      select: repo.BASE_SELECT,
     });
 
     const roles = await provisionOrganizationRoles(tx, created.id);

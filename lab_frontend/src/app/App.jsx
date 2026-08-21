@@ -7,52 +7,46 @@ import {
   Bell,
   LayoutDashboard,
   Users,
-  ClipboardList,
-  FileText,
   CreditCard,
   UserCheck,
   Building2,
   ScrollText,
-  BarChart3,
-  FlaskConical,
-  Settings,
-  Plus,
   Droplets,
   Microscope,
   RadioTower,
   X,
   ShieldCheck,
   GitBranch,
+  FlaskConical,
+  ClipboardList,
+  Receipt,
+  FileCheck,
+  BarChart3,
+  Settings,
 } from "lucide-react";
 import { Modal } from "./components/UIComponents";
 import { LoginScreen } from "./components/Login";
 import { useAuth } from "./auth/AuthContext";
 import { api } from "./lib/api";
-import { resolveTenantSlug } from "./auth/roleMap";
 
 import {
   DashboardScreen,
   PatientsScreen,
-  PatientDetailScreen,
-  AdminTestOrders,
-  AdminResultsScreen,
-  AdminPaymentsScreen,
   UsersScreen,
   CentresScreen,
-  AuditLogsScreen,
-  ReportsScreen,
   TestCatalogScreen,
-  SettingsScreen,
+  ReportsScreen,
+  AuditLogsScreen,
+  LetterheadSettingsScreen,
 } from "./components/Admin";
 
 import {
   ReceptionistDashboard,
   ReceptionistPatientsScreen,
-  ReceptionistPatientDetailScreen,
-  CreateOrderScreen,
-  TestOrdersScreen,
-  ReceptionistResultsScreen,
 } from "./components/Receptionist";
+
+import { OrdersScreen, PaymentsScreen } from "./components/Orders";
+import { ResultsScreen, ReceptionistResultsScreen } from "./components/Results";
 
 import { PhlebotomistDashboard } from "./components/Phlebotomist";
 import { LabTechDashboard } from "./components/LabTech";
@@ -76,17 +70,17 @@ import {
  * enforces tenant isolation regardless of the URL.
  *
  * Route map (tenant always lives in the path — subdomain-ready):
- *   /                     → RootRedirect (send to the right place)
+ *   /                     → 404 (no landing page; enter via a lab slug or /super-admin)
  *   /super-admin          → platform login
  *   /super-admin/app/*    → platform dashboards (RequireAuth, platform area)
  *   /:tenantSlug          → laboratory login (tenant resolved from the DB)
  *   /:tenantSlug/app/*    → laboratory dashboards (RequireAuth, tenant area)
- *   *                     → back to /
+ *   *                     → 404
  */
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<RootRedirect />} />
+      <Route path="/" element={<NotFound />} />
 
       <Route path="/super-admin" element={<PlatformLoginRoute />} />
       <Route
@@ -108,7 +102,7 @@ export default function App() {
         }
       />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
@@ -147,12 +141,29 @@ function TenantNotFound({ slug, message }) {
         <p className="text-sm text-muted-foreground mt-2">
           {message || `No active laboratory matches “${slug}”.`}
         </p>
-        <a
-          href="/super-admin"
-          className="inline-block mt-5 text-sm text-primary hover:underline"
-        >
-          Go to platform sign-in
-        </a>
+        <p className="text-sm text-muted-foreground mt-5">
+          Reach out to the developer to get your page link.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Generic 404 for the base URL and any route that matches nothing. */
+function NotFound() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0f1e3d] to-[#1a3a6e] flex items-center justify-center p-4">
+      <div className="w-full max-w-sm text-center bg-card rounded-2xl p-8 shadow-xl">
+        <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-4">
+          <span className="text-base font-bold text-muted-foreground">404</span>
+        </div>
+        <h1 className="text-lg font-semibold">Page not found</h1>
+        <p className="text-sm text-muted-foreground mt-2">
+          This page doesn’t exist.
+        </p>
+        <p className="text-sm text-muted-foreground mt-5">
+          Reach out to the developer to get your page link.
+        </p>
       </div>
     </div>
   );
@@ -169,21 +180,6 @@ function SessionRecovery() {
     logout();
   }, [logout]);
   return <Navigate to="/super-admin" replace />;
-}
-
-/** Entry point at `/` — routes the visitor to the right place. */
-function RootRedirect() {
-  const auth = useAuth();
-  if (auth.booting) return <BootSplash />;
-  if (auth.isAuthenticated) {
-    const home = areaHomePath(auth);
-    return home ? <Navigate to={home} replace /> : <SessionRecovery />;
-  }
-  // Not signed in and no tenant in the path. If we're on a tenant subdomain
-  // (future cutover), send them to that laboratory's login; otherwise default
-  // to the platform sign-in.
-  const sub = resolveTenantSlug(null);
-  return <Navigate to={sub ? `/${sub}` : "/super-admin"} replace />;
 }
 
 /**
@@ -347,8 +343,6 @@ function AppShell() {
   const navigateRoute = useNavigate();
 
   const [screen, setScreen] = useState(() => defaultScreenForRole(role));
-  const [selectedPatient, setSelectedPatient] = useState(null);
-  const [orderInitialConfig, setOrderInitialConfig] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -399,12 +393,7 @@ function AppShell() {
     setScreen(defaultScreenForRole(role));
   }, [role]);
 
-  function navigate(s, params) {
-    if (s === "create_order" && params?.patient) {
-      setOrderInitialConfig(params);
-    } else {
-      setOrderInitialConfig(null);
-    }
+  function navigate(s) {
     setScreen(s);
     setSidebarOpen(false); // Close sidebar on mobile item selection
   }
@@ -412,7 +401,6 @@ function AppShell() {
   const isPlatform = role === "super_admin";
   // Real values from the session — never hard-coded.
   const userName = user?.fullName || "User";
-  const userCentre = tenant?.name || "";
   const brand = isPlatform ? "Platform Admin" : tenant?.name || "Laboratory";
   const loginPath = isPlatform ? "/super-admin" : `/${tenant?.slug ?? ""}`;
 
@@ -443,9 +431,9 @@ function AppShell() {
           icon: LayoutDashboard,
         },
         { id: "patients", label: "Patients", icon: Users },
-        { id: "create_order", label: "New Order", icon: Plus },
-        { id: "test_orders", label: "Test Orders", icon: ClipboardList },
-        { id: "results", label: "Results", icon: FileText },
+        { id: "orders", label: "Orders", icon: ClipboardList },
+        { id: "results", label: "Results", icon: FileCheck },
+        { id: "payments", label: "Payments", icon: Receipt },
       ];
     }
     if (role === "phlebotomist")
@@ -469,14 +457,14 @@ function AppShell() {
     return [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
       { id: "patients", label: "Patients", icon: Users },
-      { id: "test_orders", label: "Test Orders", icon: ClipboardList },
-      { id: "results", label: "Results", icon: FileText },
-      { id: "payments", label: "Payments", icon: CreditCard },
+      { id: "orders", label: "Orders", icon: ClipboardList },
+      { id: "payments", label: "Payments", icon: Receipt },
+      { id: "results", label: "Results", icon: FileCheck },
       { id: "users", label: "Users", icon: UserCheck },
       { id: "centres", label: "Centres", icon: Building2 },
-      { id: "audit_logs", label: "Audit Logs", icon: ScrollText },
-      { id: "reports", label: "Reports", icon: BarChart3 },
       { id: "test_catalog", label: "Test Catalog", icon: FlaskConical },
+      { id: "reports", label: "Reports", icon: BarChart3 },
+      { id: "audit_logs", label: "Audit Logs", icon: ScrollText },
       { id: "settings", label: "Settings", icon: Settings },
     ];
   };
@@ -498,13 +486,13 @@ function AppShell() {
         }`}
       >
         <div className="px-5 py-4 border-b border-sidebar-border flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0 overflow-hidden">
             {isPlatform ? (
-              <ShieldCheck className="w-5 h-5 text-indigo-400" />
+              <ShieldCheck className="w-5 h-5 text-indigo-400 flex-shrink-0" />
             ) : (
-              <HeartPulse className="w-5 h-5 text-blue-400" />
+              <HeartPulse className="w-5 h-5 text-blue-400 flex-shrink-0" />
             )}
-            <span className="font-semibold text-white truncate">{brand}</span>
+            <span className="font-semibold text-white truncate max-w-[140px]">{brand}</span>
           </div>
           {/* Close menu button on mobile screen split */}
           <button
@@ -600,77 +588,28 @@ function AppShell() {
           {/* Admin Routes */}
           {role === "admin" && (
             <>
-              {screen === "dashboard" && (
-                <DashboardScreen onNavigate={navigate} />
-              )}
-              {screen === "patients" && (
-                <PatientsScreen
-                  onNavigate={navigate}
-                  setSelectedPatient={setSelectedPatient}
-                />
-              )}
-              {screen === "patient_detail" && (
-                <PatientDetailScreen
-                  patient={selectedPatient}
-                  onNavigate={navigate}
-                />
-              )}
-              {screen === "create_order" && (
-                <CreateOrderScreen
-                  onNavigate={navigate}
-                  initialPatient={orderInitialConfig?.patient}
-                  startStep={orderInitialConfig?.startAtStep || 1}
-                />
-              )}
-              {screen === "test_orders" && (
-                <AdminTestOrders onNavigate={navigate} />
-              )}
-              {screen === "results" && <AdminResultsScreen />}
-              {screen === "payments" && <AdminPaymentsScreen />}
+              {screen === "dashboard" && <DashboardScreen />}
+              {screen === "patients" && <PatientsScreen />}
+              {screen === "orders" && <OrdersScreen />}
+              {screen === "payments" && <PaymentsScreen />}
+              {screen === "results" && <ResultsScreen />}
               {screen === "users" && <UsersScreen />}
               {screen === "centres" && <CentresScreen />}
-              {screen === "audit_logs" && <AuditLogsScreen />}
-              {screen === "reports" && <ReportsScreen />}
               {screen === "test_catalog" && <TestCatalogScreen />}
-              {screen === "settings" && <SettingsScreen />}
+              {screen === "reports" && <ReportsScreen />}
+              {screen === "audit_logs" && <AuditLogsScreen />}
+              {screen === "settings" && <LetterheadSettingsScreen />}
             </>
           )}
 
           {/* Receptionist Routes */}
           {role === "receptionist" && (
             <>
-              {screen === "receptionist_dashboard" && (
-                <ReceptionistDashboard
-                  onNavigate={navigate}
-                  userCentre={userCentre}
-                />
-              )}
-              {screen === "patients" && (
-                <ReceptionistPatientsScreen
-                  onNavigate={navigate}
-                  setSelectedPatient={setSelectedPatient}
-                  userCentre={userCentre}
-                />
-              )}
-              {screen === "patient_detail" && (
-                <ReceptionistPatientDetailScreen
-                  patient={selectedPatient}
-                  onNavigate={navigate}
-                />
-              )}
-              {screen === "create_order" && (
-                <CreateOrderScreen
-                  onNavigate={navigate}
-                  initialPatient={orderInitialConfig?.patient}
-                  startStep={orderInitialConfig?.startAtStep || 1}
-                />
-              )}
-              {screen === "test_orders" && (
-                <TestOrdersScreen onNavigate={navigate} userCentre={userCentre} />
-              )}
-              {screen === "results" && (
-                <ReceptionistResultsScreen userCentre={userCentre} />
-              )}
+              {screen === "receptionist_dashboard" && <ReceptionistDashboard />}
+              {screen === "patients" && <ReceptionistPatientsScreen />}
+              {screen === "orders" && <OrdersScreen />}
+              {screen === "results" && <ReceptionistResultsScreen />}
+              {screen === "payments" && <PaymentsScreen />}
             </>
           )}
 

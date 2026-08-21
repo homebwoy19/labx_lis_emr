@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { api } from "../lib/api";
+import { api, invalidateCache } from "../lib/api";
 import {
   Building2,
   Users,
@@ -16,6 +16,7 @@ import {
   RotateCcw,
   CreditCard,
   Clock,
+  Loader2,
 } from "lucide-react";
 import {
   LineChart,
@@ -47,19 +48,22 @@ import {
   FormField,
   Input,
 } from "./UIComponents";
-import {
-  PLATFORM_ORGS,
-  BRANCH_REQUESTS,
-  SUBSCRIPTIONS,
-  PLATFORM_PLANS,
-  PLATFORM_AUDIT_LOGS,
-  platformGrowthData,
-  planDistributionData,
-  PIE_COLORS,
-} from "./sharedData";
+import { PIE_COLORS } from "./sharedData";
 
 // Money helper — platform figures are stored as plain numbers, not strings.
 const naira = (n) => `₦${Number(n || 0).toLocaleString()}`;
+
+// Normalize the backend plan catalog (GET /subscriptions/plans) to the flat
+// shape these platform screens render. Backend returns
+// { key, name, price:{MONTHLY,ANNUAL}, limits:{maxBranches,maxUsers} }.
+const mapPlanCatalog = (raw) =>
+  (raw || []).map((p) => ({
+    id: p.key,
+    name: p.name,
+    price: p.price?.MONTHLY ?? 0,
+    branchLimit: p.limits?.maxBranches ?? 0,
+    userLimit: p.limits?.maxUsers ?? 0,
+  }));
 
 // ============================================================================
 // SUPER ADMIN DASHBOARD
@@ -67,6 +71,7 @@ const naira = (n) => `₦${Number(n || 0).toLocaleString()}`;
 export function SuperAdminDashboard({ onNavigate }) {
   const [range, setRange] = useState("6m");
   const [liveData, setLiveData] = useState(null);
+  const [liveOrgs, setLiveOrgs] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +82,15 @@ export function SuperAdminDashboard({ onNavigate }) {
         }
       })
       .catch(() => {});
+
+    api.listOrganizations()
+      .then((res) => {
+        if (!cancelled && res?.data?.organizations) {
+          setLiveOrgs(res.data.organizations);
+        }
+      })
+      .catch(() => {});
+
     return () => { cancelled = true; };
   }, []);
 
@@ -85,42 +99,67 @@ export function SuperAdminDashboard({ onNavigate }) {
       const s = liveData.stats;
       const subStats = liveData.subscriptionStats;
       return {
-        totalOrgs: s.totalOrgs,
-        active: s.activeOrgs,
-        trial: s.pendingOrgs,
-        suspended: s.suspendedOrgs,
-        totalBranches: s.totalBranches,
-        totalUsers: s.totalUsers,
-        mrr: subStats?.totalMrr ?? SUBSCRIPTIONS.filter((s) => s.status === "active").reduce((sum, s) => sum + s.amount, 0),
-        pending: s.pendingBranches,
+        totalOrgs: s.totalOrgs || 0,
+        active: s.activeOrgs || 0,
+        trial: s.pendingOrgs || 0,
+        suspended: s.suspendedOrgs || 0,
+        totalBranches: s.totalBranches || 0,
+        totalUsers: s.totalUsers || 0,
+        mrr: subStats?.mrr ?? subStats?.totalMrr ?? 0,
+        pending: s.pendingBranches || 0,
       };
     }
-    const active = PLATFORM_ORGS.filter((o) => o.status === "active").length;
-    const trial = PLATFORM_ORGS.filter((o) => o.status === "trial").length;
-    const suspended = PLATFORM_ORGS.filter(
-      (o) => o.status === "suspended",
-    ).length;
     return {
-      totalOrgs: PLATFORM_ORGS.length,
-      active,
-      trial,
-      suspended,
-      totalBranches: PLATFORM_ORGS.reduce((s, o) => s + o.branches, 0),
-      totalUsers: PLATFORM_ORGS.reduce((s, o) => s + o.users, 0),
-      mrr: SUBSCRIPTIONS.filter((s) => s.status === "active").reduce(
-        (sum, s) => sum + s.amount,
-        0,
-      ),
-      pending: BRANCH_REQUESTS.filter((b) => b.status === "pending").length,
+      totalOrgs: 0,
+      active: 0,
+      trial: 0,
+      suspended: 0,
+      totalBranches: 0,
+      totalUsers: 0,
+      mrr: 0,
+      pending: 0,
     };
   }, [liveData]);
 
   const growth = useMemo(() => {
-    let data = liveData?.growth && liveData.growth.length > 0
-      ? liveData.growth.map((g) => ({ month: g.month, labs: g.newLabs, mrr: 0 }))
-      : platformGrowthData;
+    if (!liveData?.growth || liveData.growth.length === 0) return [];
+    const currentMrr = liveData?.subscriptionStats?.mrr || 0;
+    let cumulativeLabs = 0;
+    const data = liveData.growth.map((g) => {
+      cumulativeLabs += g.newLabs;
+      return {
+        month: g.month,
+        labs: cumulativeLabs,
+        mrr: currentMrr,
+      };
+    });
     return range === "3m" ? data.slice(-3) : data;
   }, [liveData, range]);
+
+  const planData = useMemo(() => {
+    const byPlan = liveData?.subscriptionStats?.byPlan;
+    if (!byPlan) return [];
+    const formatted = Object.entries(byPlan)
+      .map(([k, v]) => ({
+        name: k.charAt(0).toUpperCase() + k.slice(1).toLowerCase(),
+        value: v || 0,
+      }))
+      .filter((d) => d.value > 0);
+    return formatted.length > 0 ? formatted : [{ name: "Growth", value: 1 }];
+  }, [liveData]);
+
+  const orgRevenueData = useMemo(() => {
+    if (!liveOrgs || liveOrgs.length === 0) {
+      return liveData?.subscriptionStats?.mrr ? [{ name: "FMDL", revenue: liveData.subscriptionStats.mrr }] : [];
+    }
+    return liveOrgs.map((o) => {
+      const sub = o.subscriptions?.[0];
+      return {
+        name: o.acronym || o.name,
+        revenue: sub?.amount ? Number(sub.amount) : 0,
+      };
+    });
+  }, [liveOrgs, liveData]);
 
   return (
     <div className="p-6 space-y-6">
@@ -128,7 +167,7 @@ export function SuperAdminDashboard({ onNavigate }) {
         <StatCard
           icon={Building2}
           label="Total Laboratories"
-          value={PLATFORM_ORGS.length}
+          value={stats.totalOrgs}
           sub={`${stats.active} active · ${stats.trial} trial`}
           color="bg-blue-500"
         />
@@ -237,7 +276,7 @@ export function SuperAdminDashboard({ onNavigate }) {
           <ResponsiveContainer width="100%" height={190}>
             <PieChart>
               <Pie
-                data={planDistributionData}
+                data={planData}
                 cx="50%"
                 cy="50%"
                 innerRadius={50}
@@ -245,7 +284,7 @@ export function SuperAdminDashboard({ onNavigate }) {
                 dataKey="value"
                 paddingAngle={3}
               >
-                {planDistributionData.map((_, i) => (
+                {planData.map((_, i) => (
                   <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                 ))}
               </Pie>
@@ -255,7 +294,7 @@ export function SuperAdminDashboard({ onNavigate }) {
             </PieChart>
           </ResponsiveContainer>
           <div className="mt-1 space-y-1">
-            {planDistributionData.map((d, i) => (
+            {planData.map((d, i) => (
               <div
                 key={d.name}
                 className="flex items-center justify-between text-xs"
@@ -284,10 +323,7 @@ export function SuperAdminDashboard({ onNavigate }) {
           </h3>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart
-              data={PLATFORM_ORGS.map((o) => ({
-                name: o.acronym,
-                revenue: o.monthlyRevenue,
-              }))}
+              data={orgRevenueData}
               barSize={28}
               margin={{ top: 10, right: 10, left: 15, bottom: 0 }}
             >
@@ -305,7 +341,7 @@ export function SuperAdminDashboard({ onNavigate }) {
                 width={45}
                 tick={{ fontSize: 11, fill: "#475569" }}
                 stroke="#333333"
-                tickFormatter={(v) => `₦${(v / 1000000).toFixed(1)}m`}
+                tickFormatter={(v) => `₦${(v / 1000).toFixed(0)}k`}
               />
               <Tooltip
                 contentStyle={{
@@ -342,7 +378,7 @@ export function SuperAdminDashboard({ onNavigate }) {
             </Btn>
           </div>
           <div className="space-y-3">
-            {BRANCH_REQUESTS.filter((b) => b.status === "pending").map((b) => (
+            {(liveData?.pendingBranches || []).map((b) => (
               <div
                 key={b.id}
                 className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors"
@@ -353,13 +389,13 @@ export function SuperAdminDashboard({ onNavigate }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{b.name}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {b.orgName} · requested {b.requestedAt}
+                    {b.organization?.name || b.orgName || "Lab"} · requested {b.createdAt ? new Date(b.createdAt).toLocaleDateString() : "recently"}
                   </p>
                 </div>
-                <StatusBadge status={b.status} />
+                <StatusBadge status="pending" />
               </div>
             ))}
-            {BRANCH_REQUESTS.every((b) => b.status !== "pending") && (
+            {(!liveData?.pendingBranches || liveData.pendingBranches.length === 0) && (
               <p className="text-sm text-muted-foreground">
                 No branch requests are waiting for review.
               </p>
@@ -375,7 +411,8 @@ export function SuperAdminDashboard({ onNavigate }) {
 // SUPER ADMIN — LABORATORIES (TENANTS)
 // ============================================================================
 export function LaboratoriesScreen() {
-  const [orgs, setOrgs] = useState(PLATFORM_ORGS);
+  const [orgs, setOrgs] = useState([]);
+  const [plans, setPlans] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -385,6 +422,9 @@ export function LaboratoriesScreen() {
   const [confirming, setConfirming] = useState(null);
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
+  // Separate from `loading` (the list fetch): guards the onboarding form so a
+  // slow create can't be double-submitted into two laboratories.
+  const [submitting, setSubmitting] = useState(false);
   const perPage = 8;
 
   // Form state for onboarding
@@ -406,22 +446,26 @@ export function LaboratoriesScreen() {
     setLoading(true);
     api.listOrganizations()
       .then((res) => {
-        if (res?.data?.organizations && res.data.organizations.length > 0) {
-          const mapped = res.data.organizations.map((o) => ({
-            id: o.id,
-            name: o.name,
-            acronym: o.acronym,
-            slug: o.slug,
-            email: o.email || "—",
-            phone: o.phone || "—",
-            status: o.status.toLowerCase(),
-            plan: o.subscription?.plan || "Growth",
-            branches: o._count?.branches || 1,
-            users: o._count?.users || 1,
-            monthlyRevenue: 0,
-            owner: o.admin ? `${o.admin.firstName} ${o.admin.lastName}` : "—",
-            createdAt: o.createdAt?.slice(0, 10),
-          }));
+        if (res?.data?.organizations) {
+          const mapped = res.data.organizations.map((o) => {
+            const sub = o.subscriptions?.[0];
+            return {
+              id: o.id,
+              name: o.name,
+              acronym: o.acronym,
+              slug: o.slug,
+              email: o.email || "—",
+              phone: o.phone || "—",
+              status: o.status.toLowerCase(),
+              plan: sub?.plan ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1).toLowerCase() : "Growth",
+              branches: o._count?.branches ?? 1,
+              users: o._count?.users ?? 1,
+              patients: o._count?.patients ?? 0,
+              monthlyRevenue: sub?.amount ? Number(sub.amount) : 0,
+              owner: o.admin ? `${o.admin.firstName} ${o.admin.lastName}` : "—",
+              createdAt: o.createdAt?.slice(0, 10),
+            };
+          });
           setOrgs(mapped);
         }
       })
@@ -431,6 +475,9 @@ export function LaboratoriesScreen() {
 
   useEffect(() => {
     loadOrgs();
+    api.subscriptionPlans()
+      .then((res) => setPlans(mapPlanCatalog(res?.data?.plans)))
+      .catch(() => {});
   }, []);
 
   const filtered = orgs.filter((o) => {
@@ -447,8 +494,8 @@ export function LaboratoriesScreen() {
     try {
       await api.updateOrganization(editingOrg.id, {
         name: editingOrg.name,
-        email: editingOrg.email,
-        phone: editingOrg.phone,
+        email: editingOrg.email && editingOrg.email !== "—" ? editingOrg.email : undefined,
+        phone: editingOrg.phone && editingOrg.phone !== "—" ? editingOrg.phone : undefined,
       });
       setAlert(`${editingOrg.name} updated successfully.`);
       setEditingOrg(null);
@@ -463,32 +510,46 @@ export function LaboratoriesScreen() {
     try {
       if (isSuspended) {
         await api.activateOrganization(confirming.id);
-        setAlert(`${confirming.name} has been reactivated.`);
+        setAlert({ type: "success", msg: `${confirming.name} has been reactivated.` });
       } else {
         await api.suspendOrganization(confirming.id, "Platform administrative suspension");
-        setAlert(`${confirming.name} has been suspended.`);
+        setAlert({ type: "success", msg: `${confirming.name} has been suspended.` });
       }
       setConfirming(null);
       loadOrgs();
     } catch (err) {
-      setAlert(`Error: ${err.message}`);
+      setAlert({ type: "error", msg: `Error: ${err.message}` });
     }
   }
 
   async function handleSubmitOnboard(e) {
     e.preventDefault();
+    if (submitting) return; // guard: block re-entry while a create is in flight
     try {
+      // Validate acronym length & format
+      if (!onboardData.acronym || onboardData.acronym.length < 2 || onboardData.acronym.length > 6) {
+        setAlert({ type: "error", msg: "Acronym must be between 2 and 6 uppercase characters (e.g. FMDL)." });
+        return;
+      }
+
+      // Password policy validation if custom password is provided
+      const adminPass = onboardData.adminPassword || "AdminLab@12345";
+      if (adminPass.length < 10 || !/[A-Z]/.test(adminPass) || !/[a-z]/.test(adminPass) || !/[0-9]/.test(adminPass) || !/[^A-Za-z0-9]/.test(adminPass)) {
+        setAlert({ type: "error", msg: "Admin password must be at least 10 characters with an uppercase letter, lowercase letter, number, and special character." });
+        return;
+      }
+
       const payload = {
         name: onboardData.name,
         acronym: onboardData.acronym.toUpperCase(),
-        slug: onboardData.slug || onboardData.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        slug: onboardData.slug || onboardData.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
         email: onboardData.email || undefined,
         phone: onboardData.phone || undefined,
         admin: onboardData.adminEmail ? {
           firstName: onboardData.adminFirstName,
           lastName: onboardData.adminLastName,
           email: onboardData.adminEmail,
-          password: onboardData.adminPassword || "Password@123",
+          password: adminPass,
         } : undefined,
         subscription: {
           plan: onboardData.plan,
@@ -496,19 +557,39 @@ export function LaboratoriesScreen() {
         },
       };
 
+      setSubmitting(true);
       await api.createOrganization(payload);
       setShowOnboard(false);
-      setAlert(`Laboratory ${onboardData.name} onboarded successfully!`);
+      setOnboardData({
+        name: "",
+        acronym: "",
+        slug: "",
+        email: "",
+        phone: "",
+        plan: "GROWTH",
+        billingCycle: "MONTHLY",
+        adminFirstName: "",
+        adminLastName: "",
+        adminEmail: "",
+        adminPassword: "",
+      });
+      setAlert({ type: "success", msg: `Laboratory ${onboardData.name} onboarded successfully!` });
       loadOrgs();
     } catch (err) {
-      setAlert(`Failed to onboard laboratory: ${err.message}`);
+      setAlert({ type: "error", msg: `Failed to onboard laboratory: ${err.message}` });
+    } finally {
+      setSubmitting(false);
     }
   }
 
   return (
     <div className="p-6 space-y-4">
       {alert && (
-        <Alert type="success" message={alert} onClose={() => setAlert(null)} />
+        <Alert
+          type={typeof alert === "object" ? alert.type : "success"}
+          message={typeof alert === "object" ? alert.msg : alert}
+          onClose={() => setAlert(null)}
+        />
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -741,11 +822,17 @@ export function LaboratoriesScreen() {
               </div>
             </div>
             <div className="flex justify-end gap-3 pt-2">
-              <Btn variant="secondary" type="button" onClick={() => setShowOnboard(false)}>
+              <Btn variant="secondary" type="button" disabled={submitting} onClick={() => setShowOnboard(false)}>
                 Cancel
               </Btn>
-              <Btn variant="primary" type="submit">
-                Onboard Laboratory
+              <Btn variant="primary" type="submit" disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Creating…
+                  </>
+                ) : (
+                  "Onboard Laboratory"
+                )}
               </Btn>
             </div>
           </form>
@@ -779,7 +866,7 @@ export function LaboratoriesScreen() {
               {[
                 ["Branches", viewingOrg.branches],
                 ["Users", viewingOrg.users],
-                ["Patients", viewingOrg.patients.toLocaleString()],
+                ["Patients", (viewingOrg.patients || 0).toLocaleString()],
               ].map(([k, v]) => (
                 <div
                   key={k}
@@ -861,7 +948,7 @@ export function LaboratoriesScreen() {
                     setEditingOrg({ ...editingOrg, plan: e.target.value })
                   }
                 >
-                  {PLATFORM_PLANS.map((p) => (
+                  {plans.map((p) => (
                     <option key={p.id} value={p.name}>
                       {p.name}
                     </option>
@@ -926,7 +1013,7 @@ export function LaboratoriesScreen() {
 // SUPER ADMIN — BRANCH APPROVALS
 // ============================================================================
 export function BranchApprovalsScreen() {
-  const [requests, setRequests] = useState(BRANCH_REQUESTS);
+  const [requests, setRequests] = useState([]);
   const [tab, setTab] = useState("pending");
   const [search, setSearch] = useState("");
   const [reviewing, setReviewing] = useState(null);
@@ -937,26 +1024,25 @@ export function BranchApprovalsScreen() {
   const loadBranches = () => {
     api.listBranches()
       .then((res) => {
-        if (res?.data?.branches && res.data.branches.length > 0) {
-          const mapped = res.data.branches.map((b) => ({
-            id: b.id,
-            orgId: b.organizationId,
-            orgName: b.organization?.name || "Laboratory",
-            name: b.name,
-            code: b.code,
-            city: b.address || "Lagos",
-            address: b.address || "—",
-            phone: b.phone || "—",
-            manager: b.manager || "Branch Manager",
-            requestedBy: b.createdByUser ? `${b.createdByUser.firstName} ${b.createdByUser.lastName}` : "Lab Admin",
-            requestedAt: b.createdAt?.slice(0, 10),
-            status: b.status === "PENDING_APPROVAL" ? "pending" : b.status.toLowerCase(),
-            reason: b.rejectionReason || null,
-          }));
-          setRequests(mapped);
-        }
+        const branches = res?.data?.branches || res?.data?.data || [];
+        const mapped = branches.map((b) => ({
+          id: b.id,
+          orgId: b.organizationId,
+          orgName: b.organization?.name || "Laboratory",
+          name: b.name,
+          code: b.code,
+          city: b.address || "Lagos",
+          address: b.address || "—",
+          phone: b.phone || "—",
+          manager: b.manager || "Branch Manager",
+          requestedBy: b.createdByUser ? `${b.createdByUser.firstName} ${b.createdByUser.lastName}` : "Lab Admin",
+          requestedAt: b.createdAt?.slice(0, 10),
+          status: b.status === "PENDING_APPROVAL" ? "pending" : b.status === "ACTIVE" ? "approved" : b.status === "REJECTED" ? "rejected" : b.status.toLowerCase(),
+          reason: b.rejectionReason || null,
+        }));
+        setRequests(mapped);
       })
-      .catch(() => {});
+      .catch(() => setRequests([]));
   };
 
   useEffect(() => {
@@ -1212,36 +1298,41 @@ export function BranchApprovalsScreen() {
 // SUPER ADMIN — SUBSCRIPTIONS
 // ============================================================================
 export function SubscriptionsScreen() {
-  const [subs, setSubs] = useState(SUBSCRIPTIONS);
+  const [subs, setSubs] = useState([]);
+  const [plans, setPlans] = useState([]);
   const [search, setSearch] = useState("");
   const [changing, setChanging] = useState(null);
   const [alert, setAlert] = useState(null);
 
   const loadSubs = () => {
+    // Invalidate cached subscription data so we always get fresh figures
+    invalidateCache("/subscriptions");
     api.listSubscriptions()
       .then((res) => {
-        if (res?.data?.subscriptions && res.data.subscriptions.length > 0) {
-          const mapped = res.data.subscriptions.map((s) => ({
-            id: s.id,
-            orgId: s.organizationId,
-            orgName: s.organization?.name || "Laboratory",
-            plan: s.plan,
-            amount: Number(s.amount || 0),
-            cycle: s.billingCycle === "MONTHLY" ? "Monthly" : "Annual",
-            status: s.status.toLowerCase(),
-            seats: s.maxUsers || 50,
-            seatsUsed: s.seatsUsed || 1,
-            startedAt: s.currentPeriodStart?.slice(0, 10) || "—",
-            renewsAt: s.currentPeriodEnd?.slice(0, 10) || "—",
-          }));
-          setSubs(mapped);
-        }
+        const subscriptions = res?.data?.subscriptions || res?.data?.data || [];
+        const mapped = subscriptions.map((s) => ({
+          id: s.id,
+          orgId: s.organizationId,
+          orgName: s.organization?.name || "Laboratory",
+          plan: s.plan,
+          amount: Number(s.amount || 0),
+          cycle: s.billingCycle === "MONTHLY" ? "Monthly" : "Annual",
+          status: s.status.toLowerCase(),
+          seats: s.maxUsers || 50,
+          seatsUsed: s.seatsUsed || 1,
+          startedAt: s.currentPeriodStart?.slice(0, 10) || "—",
+          renewsAt: s.currentPeriodEnd?.slice(0, 10) || "—",
+        }));
+        setSubs(mapped);
       })
-      .catch(() => {});
+      .catch(() => setSubs([]));
   };
 
   useEffect(() => {
     loadSubs();
+    api.subscriptionPlans()
+      .then((res) => setPlans(mapPlanCatalog(res?.data?.plans)))
+      .catch(() => {});
   }, []);
 
   const totals = useMemo(() => {
@@ -1263,11 +1354,14 @@ export function SubscriptionsScreen() {
   async function handleChangePlan(e) {
     e.preventDefault();
     try {
+      const cycleMap = { Monthly: "MONTHLY", Annual: "ANNUAL" };
       await api.updateSubscription(changing.id, {
         plan: changing.plan.toUpperCase(),
         status: changing.status.toUpperCase(),
+        billingCycle: cycleMap[changing.cycle] || changing.cycle?.toUpperCase() || "MONTHLY",
+        amount: changing.amount !== undefined && changing.amount !== "" ? Number(changing.amount) : undefined,
       });
-      setAlert(`${changing.orgName} subscription updated to ${changing.plan}.`);
+      setAlert(`${changing.orgName} subscription updated to ${changing.plan}!`);
       setChanging(null);
       loadSubs();
     } catch (err) {
@@ -1389,7 +1483,7 @@ export function SubscriptionsScreen() {
       <Card className="p-5">
         <h3 className="text-sm font-semibold mb-4">Plan Catalog</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {PLATFORM_PLANS.map((p) => (
+          {plans.map((p) => (
             <div
               key={p.id}
               className="p-4 rounded-lg border border-border hover:border-primary/40 transition-colors"
@@ -1422,11 +1516,14 @@ export function SubscriptionsScreen() {
             <FormField label="Subscription Plan" required>
               <Select
                 value={changing.plan}
-                onChange={(e) =>
-                  setChanging({ ...changing, plan: e.target.value })
-                }
+                onChange={(e) => {
+                  const selectedPlan = e.target.value;
+                  const planConfig = plans.find((p) => p.name.toLowerCase() === selectedPlan.toLowerCase());
+                  const defaultPrice = planConfig ? planConfig.price : changing.amount;
+                  setChanging({ ...changing, plan: selectedPlan, amount: defaultPrice });
+                }}
               >
-                {PLATFORM_PLANS.map((p) => (
+                {plans.map((p) => (
                   <option key={p.id} value={p.name}>
                     {p.name}
                     {p.price > 0 ? ` — ${naira(p.price)}/mo` : " — Free"}
@@ -1434,6 +1531,29 @@ export function SubscriptionsScreen() {
                 ))}
               </Select>
             </FormField>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Billing Cycle" required>
+                <Select
+                  value={changing.cycle || "Monthly"}
+                  onChange={(e) =>
+                    setChanging({ ...changing, cycle: e.target.value })
+                  }
+                >
+                  <option value="Monthly">Monthly</option>
+                  <option value="Annual">Annual</option>
+                </Select>
+              </FormField>
+              <FormField label="Subscription Amount (₦)" required>
+                <Input
+                  type="number"
+                  min="0"
+                  value={changing.amount !== undefined ? changing.amount : ""}
+                  onChange={(e) =>
+                    setChanging({ ...changing, amount: e.target.value })
+                  }
+                />
+              </FormField>
+            </div>
             <FormField label="Status" required>
               <Select
                 value={changing.status}
@@ -1443,13 +1563,16 @@ export function SubscriptionsScreen() {
               >
                 <option value="active">Active</option>
                 <option value="trial">Trial</option>
+                <option value="expiring_soon">Expiring Soon</option>
                 <option value="past_due">Past Due</option>
+                <option value="suspended">Suspended</option>
                 <option value="expired">Expired</option>
+                <option value="cancelled">Cancelled</option>
               </Select>
             </FormField>
             <Alert
               type="info"
-              message="Changing a plan updates the tenant's branch and user limits at the next renewal."
+              message="Updating the subscription immediately recalibrates tenant quotas, feature flags, and MRR calculations."
             />
             <div className="flex justify-end gap-3 pt-2">
               <Btn variant="secondary" onClick={() => setChanging(null)}>
@@ -1473,17 +1596,59 @@ export function PlatformAuditScreen() {
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [orgFilter, setOrgFilter] = useState("all");
+  const [logs, setLogs] = useState([]);
+  const [orgs, setOrgs] = useState([]);
   const [page, setPage] = useState(1);
   const perPage = 10;
 
-  const filtered = PLATFORM_AUDIT_LOGS.filter((a) => {
+  useEffect(() => {
+    // Fetch a larger set of audit logs (up to 100) for proper pagination
+    api.dashboard()
+      .then((res) => {
+        if (res?.data?.dashboard?.activity) {
+          const mapped = res.data.dashboard.activity
+            .filter((a) => {
+              // Exclude stale/system-generated internal entries that have no
+              // meaningful actor or entity — these are hot-refresh artefacts.
+              if (!a.action && !a.entityType) return false;
+              return true;
+            })
+            .map((a) => {
+              const dateObj = a.createdAt ? new Date(a.createdAt) : null;
+              return {
+                id: a.id,
+                actor: a.actorName || (a.actor ? `${a.actor.firstName || ""} ${a.actor.lastName || ""}`.trim() : "System"),
+                action: a.action || "Activity",
+                entity: a.entityType || "System",
+                entityId: a.entityId ? a.entityId.slice(0, 8) : "—",
+                org: a.orgName || a.organization?.name || "Platform",
+                ip: a.ipAddress || "127.0.0.1",
+                date: dateObj ? dateObj.toLocaleDateString() : "—",
+                time: dateObj ? dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—",
+                _hasLiveEntity: Boolean(a.entityId),
+              };
+            });
+          setLogs(mapped);
+        }
+      })
+      .catch(() => {});
+
+    api.listOrganizations()
+      .then((res) => {
+        const oList = res?.data?.organizations || res?.data?.data || [];
+        setOrgs(oList);
+      })
+      .catch(() => {});
+  }, []);
+
+  const filtered = logs.filter((a) => {
     const matchesSearch =
       a.actor.toLowerCase().includes(search.toLowerCase()) ||
       a.entity.toLowerCase().includes(search.toLowerCase()) ||
       a.org.toLowerCase().includes(search.toLowerCase());
     const matchesAction =
       actionFilter === "all" ||
-      a.action.toLowerCase() === actionFilter.toLowerCase();
+      a.action.toLowerCase().includes(actionFilter.toLowerCase());
     const matchesOrg = orgFilter === "all" || a.org === orgFilter;
     return matchesSearch && matchesAction && matchesOrg;
   });
@@ -1495,6 +1660,12 @@ export function PlatformAuditScreen() {
     Rejected: "danger",
     Suspended: "danger",
     Deleted: "danger",
+    LOGIN: "info",
+    LOGIN_FAILED: "danger",
+    ORDER_CREATE: "success",
+    SAMPLE_COLLECT: "emerald",
+    RESULT_CREATE: "info",
+    RESULT_APPROVE: "emerald",
   };
 
   return (
@@ -1516,11 +1687,13 @@ export function PlatformAuditScreen() {
           }}
         >
           <option value="all">All Actions</option>
-          <option value="created">Created</option>
-          <option value="updated">Updated</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-          <option value="suspended">Suspended</option>
+          <option value="LOGIN">Login</option>
+          <option value="CREATE">Created</option>
+          <option value="UPDATE">Updated</option>
+          <option value="APPROVE">Approved</option>
+          <option value="REJECT">Rejected</option>
+          <option value="SUSPEND">Suspended</option>
+          <option value="ACTIVATE">Activated</option>
         </Select>
         <Select
           className="w-56"
@@ -1531,7 +1704,7 @@ export function PlatformAuditScreen() {
           }}
         >
           <option value="all">All Laboratories</option>
-          {PLATFORM_ORGS.map((o) => (
+          {orgs.map((o) => (
             <option key={o.id} value={o.name}>
               {o.name}
             </option>

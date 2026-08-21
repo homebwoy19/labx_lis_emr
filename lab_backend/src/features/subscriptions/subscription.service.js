@@ -140,8 +140,10 @@ export async function getMySubscription(db, auth) {
     });
   }
 
+  // Seat usage counts ACTIVE users only, matching assertWithinUserLimit — the
+  // scoped `db` restricts the count to the caller's own organization.
   const [userCount, branchCount] = await Promise.all([
-    db.user.count({ where: { deletedAt: null } }),
+    db.user.count({ where: { status: "ACTIVE", deletedAt: null } }),
     db.branch.count({ where: { deletedAt: null, status: { not: "REJECTED" } } }),
   ]);
 
@@ -282,6 +284,12 @@ export async function updateSubscription(db, id, input, auth, reqContext) {
     data.isCustomPricing = resolved.isCustomPricing;
     data.maxBranches = resolved.maxBranches;
     data.maxUsers = resolved.maxUsers;
+
+    // Always recalculate period end when billing cycle is explicitly provided
+    if (input.billingCycle !== undefined) {
+      const periodStart = existing.currentPeriodStart || existing.startedAt || new Date();
+      data.currentPeriodEnd = computePeriodEnd(new Date(periodStart), nextCycle);
+    }
   }
 
   if (input.gracePeriodDays !== undefined) {
@@ -434,7 +442,12 @@ export async function assertWithinUserLimit(db, organizationId) {
     logger.warn({ organizationId }, "user-limit check skipped: no subscription");
     return;
   }
-  const current = await db.user.count({ where: { deletedAt: null } });
+  // Only ACTIVE users consume a seat. Deactivated (SUSPENDED) staff are retained
+  // for their historical records but free their slot. organizationId is passed
+  // explicitly so the count is correct even on an unscoped/transaction client.
+  const current = await db.user.count({
+    where: { organizationId, status: "ACTIVE", deletedAt: null },
+  });
   if (current >= sub.maxUsers) {
     throw ApiError.forbidden("User limit reached for your current plan", {
       code: "USER_LIMIT_REACHED",

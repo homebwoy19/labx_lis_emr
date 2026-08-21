@@ -6,7 +6,7 @@
  * intentionally not tenant-filtered. Organization is not a TENANT_MODEL.
  */
 
-const PUBLIC_SELECT = {
+export const BASE_SELECT = {
   id: true,
   name: true,
   acronym: true,
@@ -17,6 +17,28 @@ const PUBLIC_SELECT = {
   status: true,
   createdAt: true,
   updatedAt: true,
+};
+
+const PUBLIC_SELECT = {
+  ...BASE_SELECT,
+  _count: {
+    select: {
+      users: true,
+      branches: true,
+      patients: true,
+    },
+  },
+  subscriptions: {
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    select: {
+      id: true,
+      plan: true,
+      amount: true,
+      status: true,
+      billingCycle: true,
+    },
+  },
 };
 
 export async function findById(db, id) {
@@ -34,7 +56,7 @@ export async function findByAcronymOrSlug(db, acronym, slug) {
 }
 
 export async function create(db, data) {
-  return db.organization.create({ data, select: PUBLIC_SELECT });
+  return db.organization.create({ data, select: BASE_SELECT });
 }
 
 export async function list(db, { skip, take, sortBy, sortOrder, search, status }) {

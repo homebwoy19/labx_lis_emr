@@ -13,6 +13,8 @@ import paymentRoutes from "../features/payments/payment.routes.js";
 import subscriptionRoutes from "../features/subscriptions/subscription.routes.js";
 import dashboardRoutes from "../features/dashboard/dashboard.routes.js";
 import notificationRoutes from "../features/notifications/notification.routes.js";
+import documentRoutes from "../features/documents/document.routes.js";
+import letterheadRoutes from "../features/letterhead/letterhead.routes.js";
 
 /**
  * API v1 router — the single place feature routers are mounted. Adding a feature
@@ -38,5 +40,8 @@ router.use("/payments", paymentRoutes);
 router.use("/subscriptions", subscriptionRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/documents", documentRoutes);
+router.use("/letterhead", letterheadRoutes);
 
 export default router;
+

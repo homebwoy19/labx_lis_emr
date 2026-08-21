@@ -616,6 +616,14 @@ model Result {
   // Generated or uploaded PDF reference.
   documentId     String? @db.Uuid
 
+  // Receptionist-prepared narrative report (typed/edited onto the lab
+  // letterhead). Kept SEPARATE from the technician's raw entry above so the
+  // audit trail of who entered/uploaded the original result is never
+  // overwritten by the preparation step.
+  preparedReport String?   @db.Text
+  preparedBy     String?   @db.Uuid
+  preparedAt     DateTime?
+
   enteredBy       String?   @db.Uuid
   enteredAt       DateTime?
   approvedBy      String?   @db.Uuid

@@ -44,9 +44,52 @@ export const reject = asyncHandler(async (req, res) => {
   return sendSuccess(res, { message: "Result rejected", data: { result } });
 });
 
+export const prepare = asyncHandler(async (req, res) => {
+  const result = await resultService.prepareResult(
+    req.db,
+    req.params.id,
+    { preparedReport: req.body.preparedReport, submit: req.body.submit },
+    req.auth,
+    req.context,
+  );
+  const message = req.body.submit ? "Report submitted to Lab Admin" : "Report saved";
+  return sendSuccess(res, { message, data: { result } });
+});
+
 export const release = asyncHandler(async (req, res) => {
   const order = await resultService.releaseOrder(req.db, req.params.orderId, req.auth, req.context);
   return sendSuccess(res, { message: "Order released", data: { order } });
 });
 
-export default { enter, list, getOne, approve, reject, release };
+export const downloadOrderPdf = asyncHandler(async (req, res) => {
+  const { pdfBuffer, fileName } = await resultService.getOrderPdf(req.db, req.params.orderId, req.auth);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  return res.send(pdfBuffer);
+});
+
+export const sendReport = asyncHandler(async (req, res) => {
+  const outcome = await resultService.sendOrderReport(
+    req.db,
+    req.params.orderId,
+    req.auth,
+    req.context,
+  );
+  const message = outcome.emailConfigured
+    ? "Report sent to the patient's email"
+    : "Report queued — email delivery is not configured on this server (logged only)";
+  return sendSuccess(res, { message, data: outcome });
+});
+
+export default {
+  enter,
+  list,
+  getOne,
+  approve,
+  reject,
+  prepare,
+  release,
+  downloadOrderPdf,
+  sendReport,
+};
+

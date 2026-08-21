@@ -4,7 +4,7 @@ Comprehensive documentation for all environment variables, external services, de
 
 ---
 
-## 1. Complete Environment Variable Catalog
+## 1. Complete Environment Variable Catalog prisma:generate, db:seed
 
 This section documents **every single environment variable** recognized by the backend application schema (`lab_backend/src/config/index.js`).
 

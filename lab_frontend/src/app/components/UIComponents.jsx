@@ -7,6 +7,7 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 
 export function Badge({ variant, children }) {
@@ -43,8 +44,18 @@ export function StatusBadge({ status }) {
     ready: { variant: "success", label: "Ready" },
     reviewed: { variant: "teal", label: "Reviewed" },
     refunded: { variant: "neutral", label: "Refunded" },
+    // Order lifecycle statuses (server-computed roll-up)
+    pending_payment: { variant: "warning", label: "Pending Payment" },
+    awaiting_sample: { variant: "info", label: "Awaiting Sample" },
+    sample_collected: { variant: "teal", label: "Sample Collected" },
+    in_progress: { variant: "info", label: "In Progress" },
+    result_entered: { variant: "info", label: "Result Entered" },
+    pending_approval: { variant: "warning", label: "Pending Approval" },
+    released: { variant: "success", label: "Released" },
     // Platform / Super Admin statuses
     suspended: { variant: "danger", label: "Suspended" },
+    invited: { variant: "info", label: "Invited" },
+    locked: { variant: "warning", label: "Locked" },
     trial: { variant: "info", label: "Trial" },
     expired: { variant: "danger", label: "Expired" },
     rejected: { variant: "danger", label: "Rejected" },
@@ -200,18 +211,22 @@ export function Alert({ type, message, onClose }) {
   const styles = {
     success: "bg-emerald-50 border-emerald-200 text-emerald-800",
     error: "bg-red-50 border-red-200 text-red-800",
+    warning: "bg-amber-50 border-amber-200 text-amber-800",
     info: "bg-blue-50 border-blue-200 text-blue-800",
   };
   const icons = {
     success: <CheckCircle className="w-4 h-4 text-emerald-600" />,
     error: <XCircle className="w-4 h-4 text-red-600" />,
+    warning: <AlertTriangle className="w-4 h-4 text-amber-600" />,
     info: <AlertCircle className="w-4 h-4 text-blue-600" />,
   };
+  // Fall back to a styled variant for unknown/missing types (never render bare).
+  const variant = styles[type] ? type : "info";
   return (
     <div
-      className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm ${styles[type]}`}
+      className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm ${styles[variant]}`}
     >
-      {icons[type]}
+      {icons[variant]}
       <span className="flex-1">{message}</span>
       {onClose && (
         <button onClick={onClose} className="opacity-60 hover:opacity-100">
@@ -264,7 +279,7 @@ export function Btn({
   className = "",
 }) {
   const base =
-    "inline-flex items-center gap-2 font-medium rounded-lg transition-colors disabled:opacity-50";
+    "inline-flex items-center gap-2 font-medium rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
   const sizes = { sm: "px-3 py-1.5 text-xs", md: "px-4 py-2 text-sm" };
   const variants = {
     primary: "bg-primary text-primary-foreground hover:bg-primary/90",

@@ -60,15 +60,88 @@ async function parseBody(res) {
   }
 }
 
+const responseCache = new Map();
+// In-flight GET promises keyed identically to responseCache. Concurrent
+// identical GETs (React StrictMode double-mount, several widgets asking for the
+// same resource) share ONE network round-trip instead of firing duplicates.
+const pendingGets = new Map();
+const CACHE_TTL_MS = 60_000; // 60 seconds — keeps pages responsive on revisit
+
+export function clearApiCache() {
+  responseCache.clear();
+}
+
 /**
- * Core request helper. `auth` (default true) attaches the bearer token and
- * enables the one-shot refresh-on-401 retry. Auth endpoints opt out to avoid
- * recursive refresh loops.
+ * Invalidate cache entries whose path contains any of the given fragments.
+ * Called after mutations to selectively clear related GET caches without
+ * wiping unrelated data (e.g. a patient-create shouldn't clear dashboard).
  */
-async function request(
-  path,
-  { method = "GET", body, auth = true, _retry = false } = {},
-) {
+export function invalidateCache(...pathFragments) {
+  if (pathFragments.length === 0) {
+    responseCache.clear();
+    return;
+  }
+  for (const key of responseCache.keys()) {
+    if (pathFragments.some((frag) => key.includes(frag))) {
+      responseCache.delete(key);
+    }
+  }
+}
+
+/**
+ * Core request helper: serves fresh GET responses from cache, coalesces
+ * concurrent identical GETs into one in-flight request, and delegates cache
+ * misses to performRequest.
+ */
+async function request(path, opts = {}) {
+  const { method = "GET", cache = true } = opts;
+  const isGet = method === "GET";
+  const cacheKey = isGet && cache ? `${accessToken || "anon"}:${path}` : null;
+
+  if (cacheKey && responseCache.has(cacheKey)) {
+    const entry = responseCache.get(cacheKey);
+    if (Date.now() - entry.timestamp < CACHE_TTL_MS) {
+      return entry.data;
+    }
+    responseCache.delete(cacheKey);
+  }
+
+  // Coalesce concurrent identical GETs — one network call shared by all callers.
+  if (cacheKey && pendingGets.has(cacheKey)) {
+    return pendingGets.get(cacheKey);
+  }
+
+  const promise = performRequest(path, opts, cacheKey);
+
+  if (cacheKey) {
+    pendingGets.set(cacheKey, promise);
+    // Drop the in-flight entry once settled (success OR failure). Attaching this
+    // settle handler doesn't swallow the rejection the caller still awaits.
+    const clear = () => {
+      if (pendingGets.get(cacheKey) === promise) pendingGets.delete(cacheKey);
+    };
+    promise.then(clear, clear);
+  }
+
+  return promise;
+}
+
+/**
+ * Performs one HTTP request: attaches auth, invalidates related caches on
+ * mutation, transparently refreshes the token once on a 401, parses the
+ * envelope, and writes the GET cache on success.
+ */
+async function performRequest(path, opts, cacheKey) {
+  const { method = "GET", body, auth = true, _retry = false } = opts;
+  const isGet = method === "GET";
+
+  // Targeted cache invalidation on mutation — only clear related paths
+  if (!isGet) {
+    // Extract the resource root from the path (e.g. /patients/123 → /patients)
+    const resource = path.split("?")[0].split("/").slice(0, 2).join("/");
+    invalidateCache(resource, "/dashboard");
+  }
+
   const headers = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (auth && accessToken) headers.Authorization = `Bearer ${accessToken}`;
@@ -84,7 +157,7 @@ async function request(
   if (res.status === 401 && auth && !_retry) {
     const refreshed = await tryRefresh();
     if (refreshed) {
-      return request(path, { method, body, auth, _retry: true });
+      return request(path, { ...opts, _retry: true, cache: false });
     }
     // Refresh failed → the session is over. Let the context tear down.
     if (authListener) authListener(null);
@@ -94,11 +167,22 @@ async function request(
 
   if (!res.ok) {
     const err = payload?.error || {};
-    throw new ApiError(err.message || payload?.message || "Request failed", {
+    let errorMsg = err.message || payload?.message || "Request failed";
+    if (err.details && Array.isArray(err.details)) {
+      errorMsg = `${errorMsg} (${err.details.map((d) => d.message || JSON.stringify(d)).join("; ")})`;
+    } else if (err.details && typeof err.details === "object") {
+      const issues = Object.entries(err.details).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`);
+      if (issues.length > 0) errorMsg = `${errorMsg} (${issues.join("; ")})`;
+    }
+    throw new ApiError(errorMsg, {
       status: res.status,
       code: err.code,
       details: err.details,
     });
+  }
+
+  if (cacheKey) {
+    responseCache.set(cacheKey, { timestamp: Date.now(), data: payload });
   }
 
   return payload;
@@ -141,6 +225,92 @@ function buildUrl(path, query) {
   return str ? `${path}?${str}` : path;
 }
 
+/**
+ * Downloads a protected binary endpoint (PDF, uploaded document) and saves it as
+ * a file. These endpoints require the Bearer header — the access token lives in
+ * memory/localStorage, NOT a cookie — so a plain `<a href>`/`window.open` would
+ * 401. We fetch with auth, refresh once on a 401 (mirroring `performRequest`),
+ * then save the blob via a transient object URL. Never returns a URL.
+ */
+async function downloadBlob(path, fallbackName, _retry = false) {
+  const headers = {};
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "GET",
+    headers,
+    credentials: "include",
+  });
+
+  if (res.status === 401 && !_retry) {
+    const refreshed = await tryRefresh();
+    if (refreshed) return downloadBlob(path, fallbackName, true);
+    if (authListener) authListener(null);
+  }
+
+  if (!res.ok) {
+    const payload = await parseBody(res);
+    const err = payload?.error || {};
+    throw new ApiError(err.message || payload?.message || "Download failed", {
+      status: res.status,
+      code: err.code,
+      details: err.details,
+    });
+  }
+
+  // Honour a server-provided filename (Content-Disposition) when present.
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  const filename = match ? decodeURIComponent(match[1]) : fallbackName;
+
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+/**
+ * Fetches a protected document and returns a short-lived object URL suitable for
+ * inline preview (e.g. showing an uploaded logo in an <img>). Mirrors
+ * `downloadBlob`'s auth + single-refresh handling, but instead of forcing a
+ * download it hands back a `blob:` URL. The CALLER owns that URL and must call
+ * `URL.revokeObjectURL(url)` when the preview is torn down, or it leaks.
+ */
+async function fetchObjectUrl(path, _retry = false) {
+  const headers = {};
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "GET",
+    headers,
+    credentials: "include",
+  });
+
+  if (res.status === 401 && !_retry) {
+    const refreshed = await tryRefresh();
+    if (refreshed) return fetchObjectUrl(path, true);
+    if (authListener) authListener(null);
+  }
+
+  if (!res.ok) {
+    const payload = await parseBody(res);
+    const err = payload?.error || {};
+    throw new ApiError(err.message || payload?.message || "Preview failed", {
+      status: res.status,
+      code: err.code,
+      details: err.details,
+    });
+  }
+
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 // ── Public API surface ───────────────────────────────────────────────────────
 
 export const api = {
@@ -174,6 +344,15 @@ export const api = {
       method: "POST",
       auth: false,
       body: { email },
+    });
+  },
+
+  /** Consume a reset token and set a new password (revokes all sessions). */
+  resetPassword({ token, password }) {
+    return request("/auth/reset-password", {
+      method: "POST",
+      auth: false,
+      body: { token, password },
     });
   },
 
@@ -287,6 +466,92 @@ export const api = {
     return request(`/patients/${id}`, { method: "PATCH", body: data });
   },
 
+  // ── Samples ──────────────────────────────────────────────────────────────
+  listSamples(query) {
+    return request(buildUrl("/samples", query));
+  },
+  createSample(data) {
+    return request("/samples", { method: "POST", body: data });
+  },
+  getSample(id) {
+    return request(`/samples/${id}`);
+  },
+  collectSample(id, data) {
+    return request(`/samples/${id}/collect`, { method: "POST", body: data || {} });
+  },
+  receiveSample(id) {
+    return request(`/samples/${id}/receive`, { method: "POST", body: {} });
+  },
+  rejectSample(id, reason) {
+    return request(`/samples/${id}/reject`, { method: "POST", body: { reason } });
+  },
+
+  // ── Results ───────────────────────────────────────────────────────────────
+  listResults(query) {
+    return request(buildUrl("/results", query));
+  },
+  getResult(id) {
+    return request(`/results/${id}`);
+  },
+  enterResult(data) {
+    return request("/results", { method: "POST", body: data });
+  },
+  /**
+   * Receptionist types/edits the narrative report onto the letterhead.
+   * `submit: true` sends it to the Lab Admin for approval; otherwise it saves
+   * as a draft. This never approves — approval is a Lab Admin capability.
+   */
+  prepareResult(id, { preparedReport, submit } = {}) {
+    return request(`/results/${id}/prepare`, {
+      method: "POST",
+      body: { preparedReport, submit: Boolean(submit) },
+    });
+  },
+  approveResult(id) {
+    return request(`/results/${id}/approve`, { method: "POST", body: {} });
+  },
+  rejectResult(id, reason) {
+    return request(`/results/${id}/reject`, { method: "POST", body: { reason } });
+  },
+  releaseOrder(orderId) {
+    return request(`/results/orders/${orderId}/release`, { method: "POST", body: {} });
+  },
+  downloadOrderPdf(orderId) {
+    return downloadBlob(`/results/orders/${orderId}/pdf`, `order-${orderId}.pdf`);
+  },
+  /** Email the approved diagnostic report to the patient's registered email. */
+  sendOrderReport(orderId) {
+    return request(`/results/orders/${orderId}/send`, { method: "POST", body: {} });
+  },
+
+  // ── Letterhead (lab branding for reports) ─────────────────────────────────
+  getLetterhead() {
+    return request("/letterhead");
+  },
+  updateLetterhead(data) {
+    return request("/letterhead", { method: "PUT", body: data });
+  },
+
+  // ── Documents ─────────────────────────────────────────────────────────────
+  uploadDocument(data) {
+    return request("/documents/upload", { method: "POST", body: data });
+  },
+  getDocument(id) {
+    return request(`/documents/${id}`);
+  },
+  downloadDocument(id) {
+    return downloadBlob(`/documents/${id}/download`, `document-${id}`);
+  },
+  /**
+   * Fetch a document as a `blob:` object URL for inline preview (e.g. rendering a
+   * stored logo/signature in an <img>). The caller MUST revokeObjectURL it on
+   * teardown. Use this instead of downloadDocument when you want to display —
+   * not force-save — the file.
+   */
+  previewDocument(id) {
+    return fetchObjectUrl(`/documents/${id}/download`);
+  },
+
   // ── Orders & Catalog ──────────────────────────────────────────────────────
   listOrders(query) {
     return request(buildUrl("/orders", query));
@@ -297,18 +562,48 @@ export const api = {
   getOrder(id) {
     return request(`/orders/${id}`);
   },
-  listResults(query) {
-    return request(buildUrl("/results", query));
+  cancelOrder(id, reason) {
+    return request(`/orders/${id}/cancel`, { method: "POST", body: { reason } });
   },
   listPayments(query) {
     return request(buildUrl("/payments", query));
   },
+  createPayment(data) {
+    return request("/payments", { method: "POST", body: data });
+  },
+  // ── Catalog: tests ──────────────────────────────────────────────────────
   listTests(query) {
     return request(buildUrl("/catalog/tests", query));
   },
+  getTest(id) {
+    return request(`/catalog/tests/${id}`);
+  },
+  createTest(data) {
+    return request("/catalog/tests", { method: "POST", body: data });
+  },
+  updateTest(id, data) {
+    return request(`/catalog/tests/${id}`, { method: "PATCH", body: data });
+  },
+  deleteTest(id) {
+    return request(`/catalog/tests/${id}`, { method: "DELETE" });
+  },
+  // ── Catalog: categories ─────────────────────────────────────────────────
   listCategories(query) {
     return request(buildUrl("/catalog/categories", query));
+  },
+  getCategory(id) {
+    return request(`/catalog/categories/${id}`);
+  },
+  createCategory(data) {
+    return request("/catalog/categories", { method: "POST", body: data });
+  },
+  updateCategory(id, data) {
+    return request(`/catalog/categories/${id}`, { method: "PATCH", body: data });
+  },
+  deleteCategory(id) {
+    return request(`/catalog/categories/${id}`, { method: "DELETE" });
   },
 };
 
 export default api;
+

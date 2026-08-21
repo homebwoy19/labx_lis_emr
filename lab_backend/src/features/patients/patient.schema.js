@@ -3,9 +3,13 @@ import { z } from "zod";
 /**
  * Patient request schemas.
  *
- * organizationId / branchId are NEVER accepted from the client — they are
- * derived from the authenticated tenant context and stamped server-side. This
- * prevents a caller from registering a patient into another lab/branch.
+ * organizationId is NEVER accepted from the client — it is derived from the
+ * authenticated tenant context and stamped server-side. `branchId` is accepted
+ * ONLY as an optional hint so an organization-scoped Lab Admin (who has no
+ * implicit branch) can choose which of THEIR OWN branches to register a patient
+ * under; it is always authorized server-side against the caller's organization,
+ * and is ignored for branch-scoped staff (who always use their own branch). A
+ * caller can never register a patient into another lab/branch.
  */
 
 const genderEnum = z.enum(["MALE", "FEMALE", "OTHER", "UNKNOWN"]);
@@ -29,6 +33,8 @@ export const createPatientSchema = {
     phone: z.string().trim().max(30).optional(),
     email: z.string().trim().toLowerCase().email().optional(),
     address: z.string().trim().max(500).optional(),
+    // Optional; only honored for org-scoped admins. Authorized server-side.
+    branchId: z.string().uuid("Invalid branch id").optional(),
   }),
 };
 

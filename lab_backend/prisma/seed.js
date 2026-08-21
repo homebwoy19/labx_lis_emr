@@ -1,7 +1,9 @@
 /* eslint-disable no-console */
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/utils/password.js";
 import { ALL_PERMISSIONS } from "../src/constants/permissions.js";
+
 import {
   ROLES,
   ROLE_SCOPE,
@@ -12,35 +14,80 @@ import {
 /**
  * Database seed.
  *
- * Idempotent — safe to run repeatedly. It provisions:
+ * Idempotent — safe to run repeatedly. It provisions the minimum needed to
+ * start using the platform; it does NOT seed demo staff, patients, orders, or a
+ * test catalog — the Lab Admin creates those through the app.
  *   1. The full permission catalog.
  *   2. System role TEMPLATES (organizationId = null) with their grants.
  *   3. A platform Super Admin user.
- *   4. TWO demo laboratories (tenants) — Foundation and MedLab — each with a
- *      head-office branch, org-scoped roles, one user per role, and a catalog,
- *      so tenant-based login (`/foundation`, `/medlab`) is testable end-to-end.
+ *   4. The Foundation laboratory (tenant): organization, head-office branch,
+ *      org-scoped role clones, a GROWTH subscription, and ONLY its Lab Admin
+ *      user, so `/foundation` login works and the Lab Admin can create the rest
+ *      of the organisation's users themselves.
  *
- * Credentials are printed at the end. Override via env:
+ * Credentials come from the environment and are REQUIRED. There are NO default
+ * or fallback credentials: if any of these is missing the seed fails fast,
+ * before touching the database. Set them (e.g. in lab_backend/.env) first:
  *   SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD, SEED_PASSWORD
+ * Secret values are never printed — only WHERE to log in is shown.
  */
 const prisma = new PrismaClient();
 
-const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "iamabdulwaasi19@gmail.com";
-const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || "HomeBwoy@225219";
-const DEMO_PASSWORD = process.env.SEED_PASSWORD || "UsersLab@12345";
+const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL;
+const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD;
+const DEMO_PASSWORD = process.env.SEED_PASSWORD;
 
 /**
- * The two demo laboratories. Tenant identity (slug/acronym) lives in the DB and
- * is resolved at login time — never hard-coded in the app. Each roster provides
- * exactly one user per role so every dashboard is reachable.
+ * Fail fast BEFORE any DB write if a seed credential is missing. No defaults,
+ * no fallbacks — a missing/blank var is a hard error naming exactly what to set.
  */
-const TENANTS = [];
+function requireSeedCredentials() {
+  const missing = [
+    ["SUPER_ADMIN_EMAIL", SUPER_ADMIN_EMAIL],
+    ["SUPER_ADMIN_PASSWORD", SUPER_ADMIN_PASSWORD],
+    ["SEED_PASSWORD", DEMO_PASSWORD],
+  ]
+    .filter(([, value]) => !value || !String(value).trim())
+    .map(([name]) => name);
+
+  if (missing.length) {
+    throw new Error(
+      `Seed aborted: missing required environment variable(s): ${missing.join(", ")}. ` +
+        "Set them before seeding — no default credentials are provided.",
+    );
+  }
+}
+
+/**
+ * The Foundation laboratory. Tenant identity (slug/acronym) lives in the DB and
+ * is resolved at login time — never hard-coded in the app. Only the Lab Admin is
+ * seeded; that admin creates the rest of the organisation's staff through the
+ * app, so the real create/seat/role code path is exercised.
+ */
+const TENANTS = [
+  {
+    name: "Foundation Medical Diagnostic Lab",
+    acronym: "FMDL",
+    slug: "foundation",
+    email: "info@foundationlab.com",
+    domain: "foundationlab.com",
+    branch: { name: "Ikeja Main Laboratory", code: "IKJ" },
+    subscription: { plan: "GROWTH", billingCycle: "MONTHLY" },
+    users: {
+      [ROLES.LAB_ADMIN]: { local: "admin", firstName: "Judith", lastName: "Obiorah" },
+    },
+  },
+];
 
 async function main() {
+  // Validate required credentials FIRST — before any destructive cleanup — so a
+  // missing var can never leave the database half-wiped.
+  requireSeedCredentials();
+
   console.log("Seeding database… Cleaning existing demo data…");
 
   // Clean demo data using valid Prisma model names
-  await prisma.auditLog.deleteMany({});
+  // await prisma.auditLog.deleteMany({});
   await prisma.notification.deleteMany({});
   await prisma.document.deleteMany({});
   await prisma.result.deleteMany({});
@@ -65,9 +112,17 @@ async function main() {
   await seedSystemRoles(permByKey);
   await seedSuperAdmin();
 
-  console.log("\nSeed complete. Clean environment initialized.\n");
-  console.log("Super Admin  (login at /super-admin):");
-  console.log(`  ${SUPER_ADMIN_EMAIL} / ${SUPER_ADMIN_PASSWORD}`);
+  for (const t of TENANTS) {
+    await seedTenant(t, permByKey);
+  }
+
+  console.log("\nSeed complete. Environment initialized.\n");
+  console.log("Super Admin: log in at /super-admin using the SUPER_ADMIN_EMAIL");
+  console.log("and SUPER_ADMIN_PASSWORD you configured in the environment.");
+  console.log("\nFoundation Lab Admin: log in at /foundation as");
+  console.log("admin@foundationlab.com using your configured SEED_PASSWORD.");
+  console.log("  (Credentials come from the environment and are never printed here.)");
+  console.log("  (Create the rest of the organisation's users from the Users screen.)\n");
 }
 
 /** Upserts every permission from the catalog; returns a key -> record map. */
@@ -160,8 +215,8 @@ async function seedTenant(tenant, permByKey) {
     orgRoles[key] = role;
   }
 
-  // One user per role. Lab Admin is org-wide (branchId null); the rest are
-  // branch-scoped so the full workflow is testable end-to-end.
+  // Seed ONLY the Lab Admin (org-wide, no branch). Every other staff member is
+  // created by the Lab Admin through the app, so the real create/seat path runs.
   for (const [roleKey, u] of Object.entries(tenant.users)) {
     await ensureUser({
       email: `${u.local}@${tenant.domain}`,
@@ -179,10 +234,9 @@ async function seedTenant(tenant, permByKey) {
     await ensureSubscription(org.id, tenant.subscription);
   }
 
-  // Test catalog (organization-wide, shared across branches)
-  await seedCatalog(org.id);
-
-  console.log(`  ✓ ${tenant.name}: organization, branch, subscription, roles, users and catalog`);
+  console.log(
+    `  ✓ ${tenant.name}: organization, branch, subscription, roles, and Lab Admin`,
+  );
 }
 
 async function ensureSubscription(organizationId, { plan, billingCycle }) {
@@ -237,29 +291,6 @@ async function ensureSubscription(organizationId, { plan, billingCycle }) {
   return sub;
 }
 
-/** Seeds a small demo catalog of categories and priced tests for the org. */
-async function seedCatalog(organizationId) {
-  const categories = {
-    HAEMATOLOGY: await ensureCategory(organizationId, "Haematology", "Blood cell counts and coagulation"),
-    CHEMISTRY: await ensureCategory(organizationId, "Clinical Chemistry", "Metabolic and biochemical panels"),
-    RADIOLOGY: await ensureCategory(organizationId, "Radiology", "Imaging investigations"),
-  };
-
-  const tests = [
-    { code: "FBC", name: "Full Blood Count", type: "LABORATORY", price: 5000, turnaroundHrs: 24, category: categories.HAEMATOLOGY.id },
-    { code: "MP", name: "Malaria Parasite", type: "LABORATORY", price: 2500, turnaroundHrs: 4, category: categories.HAEMATOLOGY.id },
-    { code: "LFT", name: "Liver Function Test", type: "LABORATORY", price: 12000, turnaroundHrs: 48, category: categories.CHEMISTRY.id },
-    { code: "FBS", name: "Fasting Blood Sugar", type: "LABORATORY", price: 3000, turnaroundHrs: 6, category: categories.CHEMISTRY.id },
-    { code: "CXR", name: "Chest X-Ray", type: "RADIOLOGY", price: 15000, turnaroundHrs: 24, category: categories.RADIOLOGY.id },
-    { code: "USS-ABD", name: "Abdominal Ultrasound", type: "RADIOLOGY", price: 20000, turnaroundHrs: 24, category: categories.RADIOLOGY.id },
-  ];
-
-  for (const t of tests) {
-    await ensureTest(organizationId, t);
-  }
-  console.log(`  ✓ ${Object.keys(categories).length} categories, ${tests.length} tests`);
-}
-
 // ── helpers ────────────────────────────────────────────────────────────────
 
 async function ensureRole({ organizationId, key, scope, isSystem }) {
@@ -290,7 +321,15 @@ async function grantPermissions(roleId, keys, permByKey) {
   }
 }
 
-async function ensureUser({ email, firstName, lastName, organizationId, branchId, roleId, password }) {
+async function ensureUser({
+  email,
+  firstName,
+  lastName,
+  organizationId,
+  branchId,
+  roleId,
+  password,
+}) {
   const lower = email.toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email: lower } });
   if (existing) {
@@ -316,31 +355,6 @@ async function ensureUser({ email, firstName, lastName, organizationId, branchId
   });
   await prisma.userRole.create({ data: { userId: user.id, roleId } });
   return user;
-}
-
-async function ensureCategory(organizationId, name, description) {
-  const existing = await prisma.testCategory.findFirst({ where: { organizationId, name } });
-  if (existing) return existing;
-  return prisma.testCategory.create({
-    data: { organizationId, name, description, status: "ACTIVE" },
-  });
-}
-
-async function ensureTest(organizationId, { code, name, type, price, turnaroundHrs, category }) {
-  const existing = await prisma.test.findFirst({ where: { organizationId, code } });
-  if (existing) return existing;
-  return prisma.test.create({
-    data: {
-      organizationId,
-      categoryId: category,
-      code,
-      name,
-      type,
-      price,
-      turnaroundHrs,
-      status: "ACTIVE",
-    },
-  });
 }
 
 async function ensureOrganization({ name, acronym, slug, email }) {
