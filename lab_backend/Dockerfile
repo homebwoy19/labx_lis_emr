@@ -10,7 +10,7 @@
 # image stays smaller and works on ARM/x64 alike.
 # ============================================================================
 
-FROM node:20-bookworm-slim AS base
+FROM node:22-bookworm-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
@@ -38,10 +38,10 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Chromium + fonts for headless PDF rendering.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      chromium \
-      fonts-liberation \
-      ca-certificates \
-      dumb-init \
+    chromium \
+    fonts-liberation \
+    ca-certificates \
+    dumb-init \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
