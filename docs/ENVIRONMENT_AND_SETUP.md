@@ -10,6 +10,8 @@ This section documents **every single environment variable** recognized by the b
 
 ### Application Core
 
+Set `PLATFORM_DOMAIN=labx.com.ng` in production. This makes `foundation.labx.com.ng` resolve the organization whose slug is `foundation`.
+
 | Variable Name  | Purpose                                       | Source / Value Type                     | Req / Opt        | Secret? | Example Format                                     | Fail-safe Behavior / Impact if Missing                                                    |
 | :------------- | :-------------------------------------------- | :-------------------------------------- | :--------------- | :------ | :------------------------------------------------- | :---------------------------------------------------------------------------------------- |
 | `NODE_ENV`     | Application runtime environment               | `development` \| `production` \| `test` | Optional         | No      | `development`                                      | Defaults to `development`. Controls log formatting and Prisma dev mode.                   |
@@ -117,6 +119,12 @@ Laboratory Scientist Funke Ogunleye funke.ogunleye@medlab.com
 Radiographer Tunde Balogun tunde.balogun@medlab.com
 
 ## 2. Production Checklist ("Before Going Live")
+
+### Tenant domains
+
+The platform owns the frontend, API, PostgreSQL database, SSL termination, and LIS infrastructure. Configure `*.labx.com.ng` to the frontend edge. A Super Admin can connect a laboratory custom hostname from its detail view; that hostname must point to the same frontend edge, which must provision TLS and preserve the original `Host` header. Keep `VITE_API_BASE_URL` pointed at the centralized API. Deploy the Prisma migration and regenerate the client before release: `npm run prisma:deploy` followed by `npm run prisma:generate`.
+
+Use `COOKIE_DOMAIN=.labx.com.ng` when the API shares that parent domain. When frontend and API are on different sites, use `COOKIE_SECURE=true` and `COOKIE_SAMESITE=none`.
 
 ### Required Configuration Changes
 

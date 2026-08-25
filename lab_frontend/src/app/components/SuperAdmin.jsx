@@ -75,7 +75,8 @@ export function SuperAdminDashboard({ onNavigate }) {
 
   useEffect(() => {
     let cancelled = false;
-    api.dashboard()
+    api
+      .dashboard()
       .then((res) => {
         if (!cancelled && res?.data?.dashboard) {
           setLiveData(res.data.dashboard);
@@ -83,7 +84,8 @@ export function SuperAdminDashboard({ onNavigate }) {
       })
       .catch(() => {});
 
-    api.listOrganizations()
+    api
+      .listOrganizations()
       .then((res) => {
         if (!cancelled && res?.data?.organizations) {
           setLiveOrgs(res.data.organizations);
@@ -91,7 +93,9 @@ export function SuperAdminDashboard({ onNavigate }) {
       })
       .catch(() => {});
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const stats = useMemo(() => {
@@ -150,7 +154,9 @@ export function SuperAdminDashboard({ onNavigate }) {
 
   const orgRevenueData = useMemo(() => {
     if (!liveOrgs || liveOrgs.length === 0) {
-      return liveData?.subscriptionStats?.mrr ? [{ name: "FMDL", revenue: liveData.subscriptionStats.mrr }] : [];
+      return liveData?.subscriptionStats?.mrr
+        ? [{ name: "FMDL", revenue: liveData.subscriptionStats.mrr }]
+        : [];
     }
     return liveOrgs.map((o) => {
       const sub = o.subscriptions?.[0];
@@ -389,13 +395,17 @@ export function SuperAdminDashboard({ onNavigate }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{b.name}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {b.organization?.name || b.orgName || "Lab"} · requested {b.createdAt ? new Date(b.createdAt).toLocaleDateString() : "recently"}
+                    {b.organization?.name || b.orgName || "Lab"} · requested{" "}
+                    {b.createdAt
+                      ? new Date(b.createdAt).toLocaleDateString()
+                      : "recently"}
                   </p>
                 </div>
                 <StatusBadge status="pending" />
               </div>
             ))}
-            {(!liveData?.pendingBranches || liveData.pendingBranches.length === 0) && (
+            {(!liveData?.pendingBranches ||
+              liveData.pendingBranches.length === 0) && (
               <p className="text-sm text-muted-foreground">
                 No branch requests are waiting for review.
               </p>
@@ -419,6 +429,8 @@ export function LaboratoriesScreen() {
   const [showOnboard, setShowOnboard] = useState(false);
   const [editingOrg, setEditingOrg] = useState(null);
   const [viewingOrg, setViewingOrg] = useState(null);
+  const [domainInput, setDomainInput] = useState("");
+  const [domainBusy, setDomainBusy] = useState(false);
   const [confirming, setConfirming] = useState(null);
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -444,7 +456,8 @@ export function LaboratoriesScreen() {
 
   const loadOrgs = () => {
     setLoading(true);
-    api.listOrganizations()
+    api
+      .listOrganizations()
       .then((res) => {
         if (res?.data?.organizations) {
           const mapped = res.data.organizations.map((o) => {
@@ -457,13 +470,17 @@ export function LaboratoriesScreen() {
               email: o.email || "—",
               phone: o.phone || "—",
               status: o.status.toLowerCase(),
-              plan: sub?.plan ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1).toLowerCase() : "Growth",
+              plan: sub?.plan
+                ? sub.plan.charAt(0).toUpperCase() +
+                  sub.plan.slice(1).toLowerCase()
+                : "Growth",
               branches: o._count?.branches ?? 1,
               users: o._count?.users ?? 1,
               patients: o._count?.patients ?? 0,
               monthlyRevenue: sub?.amount ? Number(sub.amount) : 0,
               owner: o.admin ? `${o.admin.firstName} ${o.admin.lastName}` : "—",
               createdAt: o.createdAt?.slice(0, 10),
+              domains: o.domains || [],
             };
           });
           setOrgs(mapped);
@@ -475,7 +492,8 @@ export function LaboratoriesScreen() {
 
   useEffect(() => {
     loadOrgs();
-    api.subscriptionPlans()
+    api
+      .subscriptionPlans()
       .then((res) => setPlans(mapPlanCatalog(res?.data?.plans)))
       .catch(() => {});
   }, []);
@@ -494,14 +512,21 @@ export function LaboratoriesScreen() {
     try {
       await api.updateOrganization(editingOrg.id, {
         name: editingOrg.name,
-        email: editingOrg.email && editingOrg.email !== "—" ? editingOrg.email : undefined,
-        phone: editingOrg.phone && editingOrg.phone !== "—" ? editingOrg.phone : undefined,
+        email:
+          editingOrg.email && editingOrg.email !== "—"
+            ? editingOrg.email
+            : undefined,
+        phone:
+          editingOrg.phone && editingOrg.phone !== "—"
+            ? editingOrg.phone
+            : undefined,
       });
       setAlert(`${editingOrg.name} updated successfully.`);
-      setEditingOrg(null);
       loadOrgs();
     } catch (err) {
       setAlert(`Error: ${err.message}`);
+    } finally {
+      setEditingOrg(null);
     }
   }
 
@@ -510,15 +535,25 @@ export function LaboratoriesScreen() {
     try {
       if (isSuspended) {
         await api.activateOrganization(confirming.id);
-        setAlert({ type: "success", msg: `${confirming.name} has been reactivated.` });
+        setAlert({
+          type: "success",
+          msg: `${confirming.name} has been reactivated.`,
+        });
       } else {
-        await api.suspendOrganization(confirming.id, "Platform administrative suspension");
-        setAlert({ type: "success", msg: `${confirming.name} has been suspended.` });
+        await api.suspendOrganization(
+          confirming.id,
+          "Platform administrative suspension",
+        );
+        setAlert({
+          type: "success",
+          msg: `${confirming.name} has been suspended.`,
+        });
       }
-      setConfirming(null);
       loadOrgs();
     } catch (err) {
       setAlert({ type: "error", msg: `Error: ${err.message}` });
+    } finally {
+      setConfirming(null);
     }
   }
 
@@ -527,30 +562,53 @@ export function LaboratoriesScreen() {
     if (submitting) return; // guard: block re-entry while a create is in flight
     try {
       // Validate acronym length & format
-      if (!onboardData.acronym || onboardData.acronym.length < 2 || onboardData.acronym.length > 6) {
-        setAlert({ type: "error", msg: "Acronym must be between 2 and 6 uppercase characters (e.g. FMDL)." });
+      if (
+        !onboardData.acronym ||
+        onboardData.acronym.length < 2 ||
+        onboardData.acronym.length > 6
+      ) {
+        setAlert({
+          type: "error",
+          msg: "Acronym must be between 2 and 6 uppercase characters (e.g. FMDL).",
+        });
         return;
       }
 
       // Password policy validation if custom password is provided
       const adminPass = onboardData.adminPassword || "AdminLab@12345";
-      if (adminPass.length < 10 || !/[A-Z]/.test(adminPass) || !/[a-z]/.test(adminPass) || !/[0-9]/.test(adminPass) || !/[^A-Za-z0-9]/.test(adminPass)) {
-        setAlert({ type: "error", msg: "Admin password must be at least 10 characters with an uppercase letter, lowercase letter, number, and special character." });
+      if (
+        adminPass.length < 10 ||
+        !/[A-Z]/.test(adminPass) ||
+        !/[a-z]/.test(adminPass) ||
+        !/[0-9]/.test(adminPass) ||
+        !/[^A-Za-z0-9]/.test(adminPass)
+      ) {
+        setAlert({
+          type: "error",
+          msg: "Admin password must be at least 10 characters with an uppercase letter, lowercase letter, number, and special character.",
+        });
         return;
       }
 
       const payload = {
         name: onboardData.name,
         acronym: onboardData.acronym.toUpperCase(),
-        slug: onboardData.slug || onboardData.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
+        slug:
+          onboardData.slug ||
+          onboardData.name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, ""),
         email: onboardData.email || undefined,
         phone: onboardData.phone || undefined,
-        admin: onboardData.adminEmail ? {
-          firstName: onboardData.adminFirstName,
-          lastName: onboardData.adminLastName,
-          email: onboardData.adminEmail,
-          password: adminPass,
-        } : undefined,
+        admin: onboardData.adminEmail
+          ? {
+              firstName: onboardData.adminFirstName,
+              lastName: onboardData.adminLastName,
+              email: onboardData.adminEmail,
+              password: adminPass,
+            }
+          : undefined,
         subscription: {
           plan: onboardData.plan,
           billingCycle: onboardData.billingCycle,
@@ -573,12 +631,64 @@ export function LaboratoriesScreen() {
         adminEmail: "",
         adminPassword: "",
       });
-      setAlert({ type: "success", msg: `Laboratory ${onboardData.name} onboarded successfully!` });
+      setAlert({
+        type: "success",
+        msg: `Laboratory ${onboardData.name} onboarded successfully!`,
+      });
       loadOrgs();
     } catch (err) {
-      setAlert({ type: "error", msg: `Failed to onboard laboratory: ${err.message}` });
+      // Close on failure too (the page-level alert stays visible); keep the
+      // typed form data intact so the admin can reopen and retry without
+      // re-entering everything (e.g. after a duplicate-email/acronym clash).
+      setShowOnboard(false);
+      setAlert({
+        type: "error",
+        msg: `Failed to onboard laboratory: ${err.message}`,
+      });
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleConnectDomain() {
+    if (!viewingOrg || !domainInput.trim()) return;
+    setDomainBusy(true);
+    try {
+      await api.connectOrganizationDomain(viewingOrg.id, domainInput.trim());
+      const res = await api.getOrganization(viewingOrg.id);
+      setViewingOrg((current) => ({
+        ...current,
+        domains: res?.data?.organization?.domains || [],
+      }));
+      setDomainInput("");
+      setAlert({ type: "success", msg: "Custom domain connected." });
+      loadOrgs();
+    } catch (err) {
+      setAlert({
+        type: "error",
+        msg: `Unable to connect domain: ${err.message}`,
+      });
+    } finally {
+      setDomainBusy(false);
+    }
+  }
+
+  async function handleDisconnectDomain(domainId) {
+    if (!viewingOrg) return;
+    try {
+      await api.disconnectOrganizationDomain(viewingOrg.id, domainId);
+      setViewingOrg((current) => ({
+        ...current,
+        domains: (current.domains || []).filter(
+          (domain) => domain.id !== domainId,
+        ),
+      }));
+      loadOrgs();
+    } catch (err) {
+      setAlert({
+        type: "error",
+        msg: `Unable to disconnect domain: ${err.message}`,
+      });
     }
   }
 
@@ -721,7 +831,9 @@ export function LaboratoriesScreen() {
                 <Input
                   required
                   value={onboardData.name}
-                  onChange={(e) => setOnboardData({ ...onboardData, name: e.target.value })}
+                  onChange={(e) =>
+                    setOnboardData({ ...onboardData, name: e.target.value })
+                  }
                   placeholder="e.g. Crestview Diagnostics"
                 />
               </FormField>
@@ -730,7 +842,12 @@ export function LaboratoriesScreen() {
                   required
                   maxLength={6}
                   value={onboardData.acronym}
-                  onChange={(e) => setOnboardData({ ...onboardData, acronym: e.target.value.toUpperCase() })}
+                  onChange={(e) =>
+                    setOnboardData({
+                      ...onboardData,
+                      acronym: e.target.value.toUpperCase(),
+                    })
+                  }
                   placeholder="e.g. CVD"
                 />
               </FormField>
@@ -738,7 +855,12 @@ export function LaboratoriesScreen() {
                 <Input
                   required
                   value={onboardData.slug}
-                  onChange={(e) => setOnboardData({ ...onboardData, slug: e.target.value.toLowerCase() })}
+                  onChange={(e) =>
+                    setOnboardData({
+                      ...onboardData,
+                      slug: e.target.value.toLowerCase(),
+                    })
+                  }
                   placeholder="e.g. crestview-diagnostics"
                 />
               </FormField>
@@ -747,32 +869,51 @@ export function LaboratoriesScreen() {
                   required
                   type="email"
                   value={onboardData.email}
-                  onChange={(e) => setOnboardData({ ...onboardData, email: e.target.value })}
+                  onChange={(e) =>
+                    setOnboardData({ ...onboardData, email: e.target.value })
+                  }
                   placeholder="admin@crestviewdx.com"
                 />
               </FormField>
               <FormField label="Phone">
                 <Input
                   value={onboardData.phone}
-                  onChange={(e) => setOnboardData({ ...onboardData, phone: e.target.value })}
+                  onChange={(e) =>
+                    setOnboardData({ ...onboardData, phone: e.target.value })
+                  }
                   placeholder="+234 800 XXX XXXX"
                 />
               </FormField>
               <FormField label="Subscription Plan" required>
                 <Select
                   value={onboardData.plan}
-                  onChange={(e) => setOnboardData({ ...onboardData, plan: e.target.value })}
+                  onChange={(e) =>
+                    setOnboardData({ ...onboardData, plan: e.target.value })
+                  }
                 >
-                  <option value="BASIC">Basic (₦30,000/mo · 1 Branch, 5 Users)</option>
-                  <option value="STARTER">Starter (₦75,000/mo · 2 Branches, 15 Users)</option>
-                  <option value="GROWTH">Growth (₦180,000/mo · 5 Branches, 50 Users)</option>
-                  <option value="ENTERPRISE">Enterprise (₦420,000/mo · 25 Branches, 250 Users)</option>
+                  <option value="BASIC">
+                    Basic (₦30,000/mo · 1 Branch, 5 Users)
+                  </option>
+                  <option value="STARTER">
+                    Starter (₦75,000/mo · 2 Branches, 15 Users)
+                  </option>
+                  <option value="GROWTH">
+                    Growth (₦180,000/mo · 5 Branches, 50 Users)
+                  </option>
+                  <option value="ENTERPRISE">
+                    Enterprise (₦420,000/mo · 25 Branches, 250 Users)
+                  </option>
                 </Select>
               </FormField>
               <FormField label="Billing Cycle" required>
                 <Select
                   value={onboardData.billingCycle}
-                  onChange={(e) => setOnboardData({ ...onboardData, billingCycle: e.target.value })}
+                  onChange={(e) =>
+                    setOnboardData({
+                      ...onboardData,
+                      billingCycle: e.target.value,
+                    })
+                  }
                 >
                   <option value="MONTHLY">Monthly</option>
                   <option value="ANNUAL">Annual</option>
@@ -788,7 +929,12 @@ export function LaboratoriesScreen() {
                     <Input
                       required
                       value={onboardData.adminFirstName}
-                      onChange={(e) => setOnboardData({ ...onboardData, adminFirstName: e.target.value })}
+                      onChange={(e) =>
+                        setOnboardData({
+                          ...onboardData,
+                          adminFirstName: e.target.value,
+                        })
+                      }
                       placeholder="e.g. Emeka"
                     />
                   </FormField>
@@ -796,7 +942,12 @@ export function LaboratoriesScreen() {
                     <Input
                       required
                       value={onboardData.adminLastName}
-                      onChange={(e) => setOnboardData({ ...onboardData, adminLastName: e.target.value })}
+                      onChange={(e) =>
+                        setOnboardData({
+                          ...onboardData,
+                          adminLastName: e.target.value,
+                        })
+                      }
                       placeholder="e.g. Nwosu"
                     />
                   </FormField>
@@ -805,7 +956,12 @@ export function LaboratoriesScreen() {
                       required
                       type="email"
                       value={onboardData.adminEmail}
-                      onChange={(e) => setOnboardData({ ...onboardData, adminEmail: e.target.value })}
+                      onChange={(e) =>
+                        setOnboardData({
+                          ...onboardData,
+                          adminEmail: e.target.value,
+                        })
+                      }
                       placeholder="owner@crestviewdx.com"
                     />
                   </FormField>
@@ -814,7 +970,12 @@ export function LaboratoriesScreen() {
                       required
                       type="password"
                       value={onboardData.adminPassword}
-                      onChange={(e) => setOnboardData({ ...onboardData, adminPassword: e.target.value })}
+                      onChange={(e) =>
+                        setOnboardData({
+                          ...onboardData,
+                          adminPassword: e.target.value,
+                        })
+                      }
                       placeholder="Password@123"
                     />
                   </FormField>
@@ -822,7 +983,12 @@ export function LaboratoriesScreen() {
               </div>
             </div>
             <div className="flex justify-end gap-3 pt-2">
-              <Btn variant="secondary" type="button" disabled={submitting} onClick={() => setShowOnboard(false)}>
+              <Btn
+                variant="secondary"
+                type="button"
+                disabled={submitting}
+                onClick={() => setShowOnboard(false)}
+              >
                 Cancel
               </Btn>
               <Btn variant="primary" type="submit" disabled={submitting}>
@@ -838,7 +1004,6 @@ export function LaboratoriesScreen() {
           </form>
         </Modal>
       )}
-
 
       {/* Tenant detail */}
       {viewingOrg && (
@@ -892,6 +1057,44 @@ export function LaboratoriesScreen() {
                   <span className="font-medium text-right">{v}</span>
                 </div>
               ))}
+            </div>
+            <div className="border-t border-border pt-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold">Custom domain</p>
+                <p className="text-xs text-muted-foreground">
+                  Point the domain DNS to the platform before connecting it.
+                </p>
+              </div>
+              {(viewingOrg.domains || []).map((domain) => (
+                <div
+                  key={domain.id}
+                  className="flex items-center justify-between text-sm"
+                >
+                  <span className="font-mono">{domain.hostname}</span>
+                  <button
+                    type="button"
+                    className="text-xs text-red-600"
+                    onClick={() => handleDisconnectDomain(domain.id)}
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <Input
+                  value={domainInput}
+                  onChange={(e) => setDomainInput(e.target.value)}
+                  placeholder="foundationlab.com.ng"
+                />
+                <Btn
+                  type="button"
+                  variant="primary"
+                  disabled={domainBusy || !domainInput.trim()}
+                  onClick={handleConnectDomain}
+                >
+                  {domainBusy ? "Connecting…" : "Connect"}
+                </Btn>
+              </div>
             </div>
           </div>
         </Modal>
@@ -1022,7 +1225,8 @@ export function BranchApprovalsScreen() {
   const [alert, setAlert] = useState(null);
 
   const loadBranches = () => {
-    api.listBranches()
+    api
+      .listBranches()
       .then((res) => {
         const branches = res?.data?.branches || res?.data?.data || [];
         const mapped = branches.map((b) => ({
@@ -1035,9 +1239,18 @@ export function BranchApprovalsScreen() {
           address: b.address || "—",
           phone: b.phone || "—",
           manager: b.manager || "Branch Manager",
-          requestedBy: b.createdByUser ? `${b.createdByUser.firstName} ${b.createdByUser.lastName}` : "Lab Admin",
+          requestedBy: b.createdByUser
+            ? `${b.createdByUser.firstName} ${b.createdByUser.lastName}`
+            : "Lab Admin",
           requestedAt: b.createdAt?.slice(0, 10),
-          status: b.status === "PENDING_APPROVAL" ? "pending" : b.status === "ACTIVE" ? "approved" : b.status === "REJECTED" ? "rejected" : b.status.toLowerCase(),
+          status:
+            b.status === "PENDING_APPROVAL"
+              ? "pending"
+              : b.status === "ACTIVE"
+                ? "approved"
+                : b.status === "REJECTED"
+                  ? "rejected"
+                  : b.status.toLowerCase(),
           reason: b.rejectionReason || null,
         }));
         setRequests(mapped);
@@ -1076,7 +1289,9 @@ export function BranchApprovalsScreen() {
     try {
       await api.approveBranch(req.id);
       setReviewing(null);
-      setAlert(`${req.name} approved. The branch is now live for ${req.orgName}.`);
+      setAlert(
+        `${req.name} approved. The branch is now live for ${req.orgName}.`,
+      );
       loadBranches();
     } catch (err) {
       setAlert(`Failed to approve branch: ${err.message}`);
@@ -1085,7 +1300,10 @@ export function BranchApprovalsScreen() {
 
   async function reject() {
     try {
-      await api.rejectBranch(rejecting.id, reason || "Facility application not met.");
+      await api.rejectBranch(
+        rejecting.id,
+        reason || "Facility application not met.",
+      );
       setAlert(`${rejecting.name} was rejected.`);
       setRejecting(null);
       setReviewing(null);
@@ -1307,7 +1525,8 @@ export function SubscriptionsScreen() {
   const loadSubs = () => {
     // Invalidate cached subscription data so we always get fresh figures
     invalidateCache("/subscriptions");
-    api.listSubscriptions()
+    api
+      .listSubscriptions()
       .then((res) => {
         const subscriptions = res?.data?.subscriptions || res?.data?.data || [];
         const mapped = subscriptions.map((s) => ({
@@ -1330,7 +1549,8 @@ export function SubscriptionsScreen() {
 
   useEffect(() => {
     loadSubs();
-    api.subscriptionPlans()
+    api
+      .subscriptionPlans()
       .then((res) => setPlans(mapPlanCatalog(res?.data?.plans)))
       .catch(() => {});
   }, []);
@@ -1340,7 +1560,9 @@ export function SubscriptionsScreen() {
     return {
       mrr: active.reduce((sum, s) => sum + s.amount, 0),
       active: active.length,
-      pastDue: subs.filter((s) => s.status === "past_due" || s.status === "expiring_soon").length,
+      pastDue: subs.filter(
+        (s) => s.status === "past_due" || s.status === "expiring_soon",
+      ).length,
       trial: subs.filter((s) => s.status === "trial").length,
     };
   }, [subs]);
@@ -1358,8 +1580,14 @@ export function SubscriptionsScreen() {
       await api.updateSubscription(changing.id, {
         plan: changing.plan.toUpperCase(),
         status: changing.status.toUpperCase(),
-        billingCycle: cycleMap[changing.cycle] || changing.cycle?.toUpperCase() || "MONTHLY",
-        amount: changing.amount !== undefined && changing.amount !== "" ? Number(changing.amount) : undefined,
+        billingCycle:
+          cycleMap[changing.cycle] ||
+          changing.cycle?.toUpperCase() ||
+          "MONTHLY",
+        amount:
+          changing.amount !== undefined && changing.amount !== ""
+            ? Number(changing.amount)
+            : undefined,
       });
       setAlert(`${changing.orgName} subscription updated to ${changing.plan}!`);
       setChanging(null);
@@ -1518,9 +1746,17 @@ export function SubscriptionsScreen() {
                 value={changing.plan}
                 onChange={(e) => {
                   const selectedPlan = e.target.value;
-                  const planConfig = plans.find((p) => p.name.toLowerCase() === selectedPlan.toLowerCase());
-                  const defaultPrice = planConfig ? planConfig.price : changing.amount;
-                  setChanging({ ...changing, plan: selectedPlan, amount: defaultPrice });
+                  const planConfig = plans.find(
+                    (p) => p.name.toLowerCase() === selectedPlan.toLowerCase(),
+                  );
+                  const defaultPrice = planConfig
+                    ? planConfig.price
+                    : changing.amount;
+                  setChanging({
+                    ...changing,
+                    plan: selectedPlan,
+                    amount: defaultPrice,
+                  });
                 }}
               >
                 {plans.map((p) => (
@@ -1603,7 +1839,8 @@ export function PlatformAuditScreen() {
 
   useEffect(() => {
     // Fetch a larger set of audit logs (up to 100) for proper pagination
-    api.dashboard()
+    api
+      .dashboard()
       .then((res) => {
         if (res?.data?.dashboard?.activity) {
           const mapped = res.data.dashboard.activity
@@ -1617,14 +1854,23 @@ export function PlatformAuditScreen() {
               const dateObj = a.createdAt ? new Date(a.createdAt) : null;
               return {
                 id: a.id,
-                actor: a.actorName || (a.actor ? `${a.actor.firstName || ""} ${a.actor.lastName || ""}`.trim() : "System"),
+                actor:
+                  a.actorName ||
+                  (a.actor
+                    ? `${a.actor.firstName || ""} ${a.actor.lastName || ""}`.trim()
+                    : "System"),
                 action: a.action || "Activity",
                 entity: a.entityType || "System",
                 entityId: a.entityId ? a.entityId.slice(0, 8) : "—",
                 org: a.orgName || a.organization?.name || "Platform",
                 ip: a.ipAddress || "127.0.0.1",
                 date: dateObj ? dateObj.toLocaleDateString() : "—",
-                time: dateObj ? dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—",
+                time: dateObj
+                  ? dateObj.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : "—",
                 _hasLiveEntity: Boolean(a.entityId),
               };
             });
@@ -1633,7 +1879,8 @@ export function PlatformAuditScreen() {
       })
       .catch(() => {});
 
-    api.listOrganizations()
+    api
+      .listOrganizations()
       .then((res) => {
         const oList = res?.data?.organizations || res?.data?.data || [];
         setOrgs(oList);

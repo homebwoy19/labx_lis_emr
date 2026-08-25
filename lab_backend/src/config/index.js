@@ -14,10 +14,19 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   API_PREFIX: z.string().default("/api/v1"),
   APP_NAME: z.string().default("Foundation Lab LIS"),
+  PLATFORM_DOMAIN: z
+    .string()
+    .default("labx.com.ng")
+    .transform((value) => value.trim().toLowerCase()),
   CORS_ORIGINS: z
     .string()
     .default("http://localhost:5173")
-    .transform((val) => val.split(",").map((o) => o.trim()).filter(Boolean)),
+    .transform((val) =>
+      val
+        .split(",")
+        .map((o) => o.trim())
+        .filter(Boolean),
+    ),
 
   // Database
   DATABASE_URL: z.string().url(),
@@ -86,6 +95,7 @@ export const config = {
   port: env.PORT,
   apiPrefix: env.API_PREFIX,
   appName: env.APP_NAME,
+  platformDomain: env.PLATFORM_DOMAIN,
   corsOrigins: env.CORS_ORIGINS,
 
   db: {

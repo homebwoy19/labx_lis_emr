@@ -14,6 +14,8 @@ import { authLimiter } from "../../middlewares/rateLimit.js";
  */
 const router = Router();
 
+router.get("/resolve", authLimiter, controller.resolveCurrent);
+
 /**
  * @openapi
  * /tenants/{slug}:

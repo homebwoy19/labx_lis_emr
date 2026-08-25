@@ -28,6 +28,7 @@ import { Modal } from "./components/UIComponents";
 import { LoginScreen } from "./components/Login";
 import { useAuth } from "./auth/AuthContext";
 import { api } from "./lib/api";
+import { isHostTenant, isPlatformHost, isOnCustomDomain, currentHostTenantSlug, tenantHostUrl } from "./auth/roleMap";
 
 import {
   DashboardScreen,
@@ -69,24 +70,49 @@ import {
  * role, so a user cannot URL-hop into another role's dashboard, and the backend
  * enforces tenant isolation regardless of the URL.
  *
- * Route map (tenant always lives in the path — subdomain-ready):
- *   /                     → 404 (no landing page; enter via a lab slug or /super-admin)
+ * Tenant identity comes from EITHER the host (a platform subdomain like
+ * foundation.labx.com.ng, or a custom domain like foundationlab.com.ng) OR a
+ * path segment (labx.com.ng/foundation, localhost/foundation). Host-based
+ * tenants log in at "/" and use "/app/*"; path-based tenants use "/:slug" and
+ * "/:slug/app/*". The backend resolves the host tenant from the X-Tenant-Host
+ * hint the api client sends, so isolation never depends on the URL shape.
+ *
+ * Route map:
+ *   /                     → host tenant login (subdomain/custom); apex → /super-admin; else 404
  *   /super-admin          → platform login
  *   /super-admin/app/*    → platform dashboards (RequireAuth, platform area)
- *   /:tenantSlug          → laboratory login (tenant resolved from the DB)
+ *   /app, /app/*          → host tenant dashboards (RequireAuth, tenant area)
+ *   /:tenantSlug          → laboratory login (path-based; tenant resolved from the DB)
  *   /:tenantSlug/app/*    → laboratory dashboards (RequireAuth, tenant area)
  *   *                     → 404
  */
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<NotFound />} />
+      <Route path="/" element={<RootRoute />} />
 
       <Route path="/super-admin" element={<PlatformLoginRoute />} />
       <Route
         path="/super-admin/app/*"
         element={
           <RequireAuth area="platform">
+            <AppShell />
+          </RequireAuth>
+        }
+      />
+
+      <Route
+        path="/app"
+        element={
+          <RequireAuth area="tenant">
+            <AppShell />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/app/*"
+        element={
+          <RequireAuth area="tenant">
             <AppShell />
           </RequireAuth>
         }
@@ -113,8 +139,19 @@ export default function App() {
 function areaHomePath(auth) {
   if (!auth.isAuthenticated) return null;
   if (auth.role === "super_admin") return "/super-admin/app";
-  const slug = auth.tenant?.slug;
+  if (isHostTenant()) return "/app";
+  // Prefer the authoritative token slug; fall back to the branding copy.
+  const slug = auth.organizationSlug || auth.tenant?.slug;
   return slug ? `/${slug}/app` : null;
+}
+
+function RootRoute() {
+  // Host-based tenants (platform subdomain OR custom domain) log in at the root.
+  if (isHostTenant()) return <TenantLoginRoute />;
+  // The platform apex (labx.com.ng) IS the Super Admin platform.
+  if (isPlatformHost()) return <Navigate to="/super-admin" replace />;
+  // localhost / preview / bare IP: no landing page — enter via /super-admin or a lab slug.
+  return <NotFound />;
 }
 
 /** Full-screen splash shown during the initial silent session-restore. */
@@ -183,6 +220,63 @@ function SessionRecovery() {
 }
 
 /**
+ * Full-page redirect to another ORIGIN. React-router's <Navigate> only moves
+ * within the current origin, so bouncing a user to their own laboratory's host
+ * (a different subdomain / custom domain) must go through window.location. Runs
+ * in an effect (never during render) and uses replace() so the wrong host never
+ * lands in history. A splash covers the brief reload.
+ */
+function HostRedirect({ href, label = "Taking you to your laboratory…" }) {
+  useEffect(() => {
+    if (typeof window !== "undefined" && href) {
+      window.location.replace(href);
+    }
+  }, [href]);
+  return <BootSplash label={label} />;
+}
+
+/**
+ * Host guard for CUSTOM domains, where the tenant slug is NOT derivable from the
+ * hostname. We ask the backend which tenant this host maps to and compare it to
+ * the signed-in user's organization; if they differ, the user reached another
+ * laboratory's domain while holding their own session (the refresh cookie is
+ * shared across the platform), so we bounce them to their own tenant host before
+ * the dashboard renders. Fails OPEN (renders) if the host can't be resolved —
+ * data is isolated by the token on the backend regardless of the URL, so a failed
+ * resolve must never trap the user out of their dashboard.
+ */
+function CustomDomainGuard({ ownOrgId, ownSlug, children }) {
+  const [status, setStatus] = useState("checking");
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .resolveCurrentTenant()
+      .then((res) => {
+        if (cancelled) return;
+        const hostOrgId = res?.data?.tenant?.id ?? null;
+        const mismatch =
+          hostOrgId && ownOrgId && ownSlug && hostOrgId !== ownOrgId;
+        setStatus(mismatch ? "redirect" : "ok");
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("ok");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ownOrgId, ownSlug]);
+
+  if (status === "checking") {
+    return <BootSplash label="Verifying your laboratory…" />;
+  }
+  if (status === "redirect") {
+    return <HostRedirect href={tenantHostUrl(ownSlug)} />;
+  }
+  return children;
+}
+
+/**
  * Guards a dashboard area. `area` is "platform" or "tenant". Unauthenticated
  * visitors are sent to the matching login; authenticated users in the wrong
  * area (or wrong tenant path) are bounced to their own home. Tenant isolation
@@ -197,7 +291,13 @@ function RequireAuth({ area, children }) {
   if (!auth.isAuthenticated) {
     return (
       <Navigate
-        to={area === "platform" ? "/super-admin" : `/${tenantSlug}`}
+        to={
+          area === "platform"
+            ? "/super-admin"
+            : isHostTenant()
+              ? "/"
+              : `/${tenantSlug}`
+        }
         replace
       />
     );
@@ -213,8 +313,33 @@ function RequireAuth({ area, children }) {
     if (auth.role === "super_admin") {
       return <Navigate to="/super-admin/app" replace />;
     }
-    // A tenant user visiting a different tenant's path → send to their own.
-    if (auth.tenant?.slug && tenantSlug && auth.tenant.slug !== tenantSlug) {
+
+    // Authoritative own-tenant slug from the token (survives across origins).
+    const ownSlug = auth.organizationSlug || auth.tenant?.slug || null;
+
+    // Redirect-to-own-host guard. The refresh cookie is shared platform-wide, so
+    // a signed-in user can land on ANOTHER lab's host and be silently re-authed
+    // there. When the current host belongs to a different tenant than the user's
+    // own, bounce them to their assigned laboratory host BEFORE the dashboard
+    // renders. (Data isolation is unaffected — the backend already scopes every
+    // query by the token's organization, independent of the URL.)
+    //   • Platform subdomain: the slug is in the host — compare synchronously.
+    const hostSlug = currentHostTenantSlug();
+    if (hostSlug && ownSlug && hostSlug !== ownSlug) {
+      return <HostRedirect href={tenantHostUrl(ownSlug)} />;
+    }
+    //   • Custom domain: slug isn't in the host — verify against the backend.
+    if (isOnCustomDomain() && ownSlug) {
+      return (
+        <CustomDomainGuard ownOrgId={auth.organizationId} ownSlug={ownSlug}>
+          {children}
+        </CustomDomainGuard>
+      );
+    }
+
+    // Path-based (localhost / apex): a tenant user on a different tenant's path
+    // → send them to their own home (same-origin, in-app navigation).
+    if (ownSlug && tenantSlug && ownSlug !== tenantSlug) {
       return home ? <Navigate to={home} replace /> : <SessionRecovery />;
     }
   }
@@ -290,6 +415,9 @@ function TenantLoginRoute() {
     if (auth.role === "super_admin") {
       return <Navigate to="/super-admin/app" replace />;
     }
+    if (isHostTenant()) {
+      return <Navigate to="/app" replace />;
+    }
     if (auth.tenant?.slug === tenantSlug) {
       return <Navigate to={`/${tenantSlug}/app`} replace />;
     }
@@ -308,7 +436,11 @@ function TenantLoginRoute() {
     <LoginScreen
       mode="tenant"
       tenant={state.tenant}
-      onSuccess={() => navigate(`/${tenantSlug}/app`, { replace: true })}
+      onSuccess={() =>
+        navigate(isHostTenant() ? "/app" : `/${tenantSlug}/app`, {
+          replace: true,
+        })
+      }
     />
   );
 }
@@ -354,7 +486,8 @@ function AppShell() {
   useEffect(() => {
     let cancelled = false;
     const loadUnread = () => {
-      api.notificationUnreadCount()
+      api
+        .notificationUnreadCount()
         .then((res) => {
           if (!cancelled) setUnreadCount(res?.data?.unreadCount || 0);
         })
@@ -371,7 +504,8 @@ function AppShell() {
   const handleOpenNotifications = () => {
     setShowNotifications(true);
     setLoadingNotifications(true);
-    api.notifications({ limit: 15 })
+    api
+      .notifications({ limit: 15 })
       .then((res) => setNotificationsList(res?.data?.notifications || []))
       .catch(() => {})
       .finally(() => setLoadingNotifications(false));
@@ -382,7 +516,7 @@ function AppShell() {
       await api.markAllNotificationsRead();
       setUnreadCount(0);
       setNotificationsList((prev) =>
-        prev.map((n) => ({ ...n, readAt: new Date().toISOString() }))
+        prev.map((n) => ({ ...n, readAt: new Date().toISOString() })),
       );
     } catch {}
   };
@@ -399,10 +533,19 @@ function AppShell() {
   }
 
   const isPlatform = role === "super_admin";
-  // Real values from the session — never hard-coded.
+  // Real values from the session — never hard-coded. `organizationName` (from the
+  // token) is the branding fallback when per-origin localStorage has no tenant
+  // yet (e.g. right after a cross-host redirect to the user's own subdomain).
   const userName = user?.fullName || "User";
-  const brand = isPlatform ? "Platform Admin" : tenant?.name || "Laboratory";
-  const loginPath = isPlatform ? "/super-admin" : `/${tenant?.slug ?? ""}`;
+  const brand = isPlatform
+    ? "Platform Admin"
+    : tenant?.name || user?.organizationName || "Laboratory";
+  // Host-based tenants log in at "/"; path-based tenants at "/:slug".
+  const loginPath = isPlatform
+    ? "/super-admin"
+    : isHostTenant()
+      ? "/"
+      : `/${tenant?.slug ?? user?.organizationSlug ?? ""}`;
 
   async function handleLogout() {
     await logout();
@@ -492,7 +635,9 @@ function AppShell() {
             ) : (
               <HeartPulse className="w-5 h-5 text-blue-400 flex-shrink-0" />
             )}
-            <span className="font-semibold text-white truncate max-w-[140px]">{brand}</span>
+            <span className="font-semibold text-white truncate max-w-[140px]">
+              {brand}
+            </span>
           </div>
           {/* Close menu button on mobile screen split */}
           <button
@@ -526,7 +671,7 @@ function AppShell() {
         <div className="px-3 py-4 border-t border-sidebar-border space-y-1">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-lg"
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-lg cursor-pointer"
           >
             <LogOut className="w-4 h-4" /> Logout
           </button>
@@ -638,21 +783,30 @@ function AppShell() {
               </div>
             )}
             {loadingNotifications ? (
-              <p className="text-xs text-muted-foreground py-4 text-center">Loading notifications…</p>
+              <p className="text-xs text-muted-foreground py-4 text-center">
+                Loading notifications…
+              </p>
             ) : notificationsList.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-4 text-center">No notifications at this time.</p>
+              <p className="text-xs text-muted-foreground py-4 text-center">
+                No notifications at this time.
+              </p>
             ) : (
               notificationsList.map((n) => (
                 <div
                   key={n.id}
                   className={`p-3 rounded-lg text-sm transition-colors ${
-                    !n.readAt ? "bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/50" : "bg-muted/40"
+                    !n.readAt
+                      ? "bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/50"
+                      : "bg-muted/40"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <p className="font-medium text-sm">{n.title}</p>
                     <span className="text-[10px] text-muted-foreground">
-                      {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(n.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">{n.body}</p>

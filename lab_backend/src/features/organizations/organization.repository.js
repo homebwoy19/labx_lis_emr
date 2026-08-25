@@ -17,6 +17,10 @@ export const BASE_SELECT = {
   status: true,
   createdAt: true,
   updatedAt: true,
+  domains: {
+    orderBy: { createdAt: "asc" },
+    select: { id: true, hostname: true, status: true, isPrimary: true, verifiedAt: true },
+  },
 };
 
 const PUBLIC_SELECT = {
@@ -88,4 +92,29 @@ export async function update(db, id, data) {
   return db.organization.update({ where: { id }, data, select: PUBLIC_SELECT });
 }
 
-export default { findById, findByAcronymOrSlug, create, list, update, PUBLIC_SELECT };
+export async function listDomains(db, organizationId) {
+  return db.organizationDomain.findMany({
+    where: { organizationId },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+export async function createDomain(db, data) {
+  return db.organizationDomain.create({ data });
+}
+
+export async function deleteDomain(db, id, organizationId) {
+  return db.organizationDomain.deleteMany({ where: { id, organizationId } });
+}
+
+export default {
+  findById,
+  findByAcronymOrSlug,
+  create,
+  list,
+  update,
+  listDomains,
+  createDomain,
+  deleteDomain,
+  PUBLIC_SELECT,
+};

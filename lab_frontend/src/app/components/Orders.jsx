@@ -79,7 +79,7 @@ export function OrdersScreen() {
       })
       .then((res) => {
         setOrders(res?.data?.orders || []);
-        setTotalOrders(res?.meta?.total || 0);
+        setTotalOrders(res?.meta?.pagination?.total || 0);
       })
       .catch(() => setOrders([]));
   };
@@ -232,6 +232,10 @@ export function OrdersScreen() {
       closeNew();
       loadOrders();
     } catch (err) {
+      // The order itself was not created here (createOrder threw), so it is
+      // safe to dismiss and retry. Preserve the wizard state (no resetNew) so
+      // reopening restores the patient, cart, and payment entry.
+      setShowNew(false);
       setAlert({ type: "error", msg: err.message });
     } finally {
       setSubmitting(false);
@@ -913,7 +917,7 @@ export function PaymentsScreen() {
       .then(async (res) => {
         const list = res?.data?.payments || [];
         setPayments(list);
-        setTotal(res?.meta?.total || 0);
+        setTotal(res?.meta?.pagination?.total || 0);
         const unknown = [...new Set(list.map((p) => p.orderId))].filter(
           (id) => id && !orderMap[id],
         );

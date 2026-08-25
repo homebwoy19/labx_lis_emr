@@ -30,4 +30,17 @@ export async function findActiveBySlug(slug) {
   });
 }
 
-export default { findActiveBySlug, PUBLIC_SELECT };
+export async function findActiveByHostname(hostname) {
+  return prisma.organizationDomain
+    .findFirst({
+      where: {
+        hostname: hostname.toLowerCase(),
+        status: "ACTIVE",
+        organization: { status: "ACTIVE", deletedAt: null },
+      },
+      select: { organization: { select: PUBLIC_SELECT } },
+    })
+    .then((record) => record?.organization ?? null);
+}
+
+export default { findActiveBySlug, findActiveByHostname, PUBLIC_SELECT };

@@ -7,6 +7,7 @@ import { ROLES } from "../../constants/roles.js";
 import * as repo from "./organization.repository.js";
 import { provisionOrganizationRoles } from "./orgProvisioning.js";
 import { createInitialSubscription } from "../subscriptions/subscription.service.js";
+import { config } from "../../config/index.js";
 
 /**
  * Organization service — platform-level laboratory onboarding and lifecycle.
@@ -178,10 +179,46 @@ export async function setOrganizationStatus(db, id, status, auth, reqContext, re
   return updated;
 }
 
+export async function listDomains(db, organizationId) {
+  return repo.listDomains(db, organizationId);
+}
+
+export async function addDomain(db, organizationId, hostname, auth) {
+  const domain = hostname.trim().toLowerCase().replace(/:\d+$/, "");
+  if (domain === config.platformDomain || domain.endsWith(`.${config.platformDomain}`)) {
+    throw ApiError.badRequest("Platform domains cannot be connected as custom domains", {
+      code: "PLATFORM_DOMAIN_RESERVED",
+    });
+  }
+  const existing = await db.organizationDomain.findUnique({
+    where: { hostname: domain },
+  });
+  if (existing)
+    throw ApiError.conflict("That domain is already connected", {
+      code: "DOMAIN_EXISTS",
+    });
+  return repo.createDomain(db, {
+    organizationId,
+    hostname: domain,
+    status: "ACTIVE",
+    isPrimary: true,
+    verifiedAt: new Date(),
+    createdBy: auth.userId,
+  });
+}
+
+export async function removeDomain(db, organizationId, domainId) {
+  const result = await repo.deleteDomain(db, domainId, organizationId);
+  if (!result.count) throw ApiError.notFound("Domain not found");
+}
+
 export default {
   createOrganization,
   getOrganization,
   listOrganizations,
   updateOrganization,
   setOrganizationStatus,
+  listDomains,
+  addDomain,
+  removeDomain,
 };

@@ -71,4 +71,38 @@ export const activate = asyncHandler(async (req, res) => {
   return sendSuccess(res, { message: "Organization activated", data: { organization } });
 });
 
-export default { create, list, getOne, update, suspend, activate };
+export const listDomains = asyncHandler(async (req, res) => {
+  const domains = await organizationService.listDomains(req.db, req.params.id);
+  return sendSuccess(res, { message: "OK", data: { domains } });
+});
+
+export const addDomain = asyncHandler(async (req, res) => {
+  const domain = await organizationService.addDomain(
+    req.db,
+    req.params.id,
+    req.body.hostname,
+    req.auth,
+  );
+  return sendSuccess(res, {
+    statusCode: 201,
+    message: "Domain connected",
+    data: { domain },
+  });
+});
+
+export const removeDomain = asyncHandler(async (req, res) => {
+  await organizationService.removeDomain(req.db, req.params.id, req.params.domainId);
+  return sendSuccess(res, { message: "Domain disconnected" });
+});
+
+export default {
+  create,
+  list,
+  getOne,
+  update,
+  suspend,
+  activate,
+  listDomains,
+  addDomain,
+  removeDomain,
+};

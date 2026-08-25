@@ -43,6 +43,7 @@ export async function requestBranch(db, input, auth, reqContext) {
     address: input.address ?? null,
     status: "PENDING_APPROVAL",
     createdBy: auth.userId,
+    managerId: auth.userId,
   });
 
   await writeAudit({

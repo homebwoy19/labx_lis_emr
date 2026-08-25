@@ -17,4 +17,11 @@ export async function resolveBySlug(slug) {
   return tenant;
 }
 
-export default { resolveBySlug };
+export async function resolveByHostname(hostname) {
+  const tenant = await repo.findActiveByHostname(hostname);
+  if (!tenant)
+    throw ApiError.notFound("Laboratory not found", { code: "TENANT_NOT_FOUND" });
+  return tenant;
+}
+
+export default { resolveBySlug, resolveByHostname };

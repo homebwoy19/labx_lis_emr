@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { URL } from "node:url";
 import { passwordSchema } from "../../utils/passwordPolicy.js";
 import { PLAN_KEYS } from "../subscriptions/subscription.plans.js";
 
@@ -39,6 +40,19 @@ const slug = z
   .min(2)
   .max(60)
   .regex(/^[a-z0-9-]+$/, "Slug may only contain lowercase letters, numbers and dashes");
+
+const hostname = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(253)
+  .refine((value) => {
+    try {
+      return new URL(`https://${value}`).hostname === value;
+    } catch {
+      return false;
+    }
+  }, "A valid hostname is required");
 
 /**
  * Optional subscription provisioned alongside the organization. When provided,
@@ -104,10 +118,20 @@ export const listOrganizationsSchema = {
   }),
 };
 
+export const domainSchema = {
+  params: z.object({ id: z.string().uuid() }),
+  body: z.object({ hostname }),
+};
+export const domainIdSchema = {
+  params: z.object({ id: z.string().uuid(), domainId: z.string().uuid() }),
+};
+
 export default {
   createOrganizationSchema,
   updateOrganizationSchema,
   organizationIdParamSchema,
   suspendOrganizationSchema,
   listOrganizationsSchema,
+  domainSchema,
+  domainIdSchema,
 };

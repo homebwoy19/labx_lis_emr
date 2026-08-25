@@ -46,7 +46,9 @@ function extractRolesAndPermissions(user) {
   for (const role of roles) {
     const rolePerms = role.permissions || role.rolePermissions || [];
     for (const rp of rolePerms) {
-      const key = rp.permission?.key || (typeof rp.permission === "string" ? rp.permission : rp.key);
+      const key =
+        rp.permission?.key ||
+        (typeof rp.permission === "string" ? rp.permission : rp.key);
       if (key && typeof key === "string") {
         permissions.add(key);
       }
@@ -65,6 +67,11 @@ function toPublicUser(user, roles, permissions = []) {
     email: user.email,
     phone: user.phone,
     organizationId: user.organizationId,
+    // Own tenant slug/name (null for the platform Super Admin). The slug lets the
+    // client redirect a user to their assigned host when the URL points elsewhere;
+    // the name is a branding fallback when per-origin localStorage is empty.
+    organizationSlug: user.organization?.slug ?? null,
+    organizationName: user.organization?.name ?? null,
     branchId: user.branchId,
     status: user.status,
     emailVerifiedAt: user.emailVerifiedAt,
@@ -102,9 +109,9 @@ function issueAccessToken(user, sessionId) {
  * On any mismatch we throw the SAME generic credentials error used elsewhere so
  * the endpoint never reveals whether an account exists in another tenant.
  */
-async function assertTenantAccess(user, slug, context, genericError) {
-  if (slug) {
-    const tenant = await tenantRepo.findActiveBySlug(slug);
+async function assertTenantAccess(user, slug, tenantId, context, genericError) {
+  if (slug || tenantId) {
+    const tenant = tenantId ? { id: tenantId } : await tenantRepo.findActiveBySlug(slug);
     if (!tenant || user.organizationId !== tenant.id) {
       await writeAudit({
         action: AUDIT_ACTIONS.LOGIN_FAILED,
@@ -142,7 +149,10 @@ async function assertTenantAccess(user, slug, context, genericError) {
  * issues an access token (returned) plus a refresh token (raw value returned for
  * the controller to set as an HttpOnly cookie).
  */
-export async function login({ email, password, slug, deviceId, deviceName }, context) {
+export async function login(
+  { email, password, slug, tenantId, tenantSlug, deviceId, deviceName },
+  context,
+) {
   const genericError = ApiError.unauthorized("Invalid email or password", {
     code: "INVALID_CREDENTIALS",
   });
@@ -204,7 +214,7 @@ export async function login({ email, password, slug, deviceId, deviceName }, con
   // own laboratory (or the platform login, for the Super Admin). Enforced here,
   // after the password is verified, so a correct-but-wrong-tenant login is still
   // rejected with the same generic error — never leaking cross-tenant accounts.
-  await assertTenantAccess(user, slug, context, genericError);
+  await assertTenantAccess(user, tenantSlug || slug, tenantId, context, genericError);
 
   const resolvedDeviceId = resolveDeviceId(deviceId, context);
 
@@ -334,7 +344,9 @@ export async function refresh(rawToken, context) {
   const stored = await repo.findRefreshTokenByHash(tokenHash);
 
   if (!stored) {
-    throw ApiError.unauthorized("Invalid refresh token", { code: "INVALID_REFRESH_TOKEN" });
+    throw ApiError.unauthorized("Invalid refresh token", {
+      code: "INVALID_REFRESH_TOKEN",
+    });
   }
 
   // Reuse detection: a revoked token being presented again → compromise.
@@ -349,19 +361,26 @@ export async function refresh(rawToken, context) {
       newValue: { reason: "refresh_token_reuse" },
       context,
     });
-    logger.warn({ userId: stored.userId }, "refresh token reuse detected — session revoked");
+    logger.warn(
+      { userId: stored.userId },
+      "refresh token reuse detected — session revoked",
+    );
     throw ApiError.unauthorized("Refresh token has been revoked", {
       code: "REFRESH_TOKEN_REVOKED",
     });
   }
 
   if (stored.expiresAt < new Date()) {
-    throw ApiError.unauthorized("Refresh token expired", { code: "REFRESH_TOKEN_EXPIRED" });
+    throw ApiError.unauthorized("Refresh token expired", {
+      code: "REFRESH_TOKEN_EXPIRED",
+    });
   }
 
   const session = stored.session;
   if (!session || session.revokedAt || session.expiresAt < new Date()) {
-    throw ApiError.unauthorized("Session is no longer valid", { code: "SESSION_INVALID" });
+    throw ApiError.unauthorized("Session is no longer valid", {
+      code: "SESSION_INVALID",
+    });
   }
 
   // Idle-timeout: sessions inactive beyond the configured window are killed.
@@ -377,7 +396,9 @@ export async function refresh(rawToken, context) {
   const user = await repo.findUserById(stored.userId);
   if (!user || user.status !== "ACTIVE" || user.deletedAt) {
     await repo.revokeSession(session.id);
-    throw ApiError.unauthorized("Account is no longer active", { code: "ACCOUNT_NOT_ACTIVE" });
+    throw ApiError.unauthorized("Account is no longer active", {
+      code: "ACCOUNT_NOT_ACTIVE",
+    });
   }
 
   // Rotate: issue new token, link + revoke the old one, refresh session activity.
@@ -488,7 +509,10 @@ export async function resetPassword({ token, password }, context) {
  * CHANGE PASSWORD — for an authenticated user. Verifies the current password,
  * then rotates it and revokes all OTHER sessions (keeps the current device in).
  */
-export async function changePassword({ userId, currentPassword, newPassword, currentSessionId }, context) {
+export async function changePassword(
+  { userId, currentPassword, newPassword, currentSessionId },
+  context,
+) {
   const user = await repo.findUserById(userId);
   if (!user) throw ApiError.notFound("User not found");
 

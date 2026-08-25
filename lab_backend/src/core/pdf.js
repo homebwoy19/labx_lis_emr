@@ -107,8 +107,12 @@ export async function generateResultPdf({
       const badgeText = status === "APPROVED" ? "VERIFIED" : escapeHtml(status.replace(/_/g, " "));
 
       // The receptionist's approved narrative is the official report content.
-      const preparedHtml = r.preparedReport
-        ? `<div class="report-narrative">${multiline(r.preparedReport)}</div>`
+      // It is authored in the rich-text editor and stored as HTML; legacy
+      // plain-text drafts (no markup) are still converted with <br/>.
+      const narrative = r.preparedReport || "";
+      const looksHtml = /<[a-z][\s\S]*>/i.test(narrative);
+      const preparedHtml = narrative
+        ? `<div class="report-narrative">${looksHtml ? narrative : multiline(narrative)}</div>`
         : "";
 
       // Technician's structured findings (fallback / supporting data).
@@ -254,6 +258,22 @@ export async function generateResultPdf({
           }
           .test-body { padding: 12px 14px; }
           .report-narrative { font-size: 12.5px; color: #0f172a; line-height: 1.7; }
+          .report-narrative p { margin: 0 0 8px; }
+          .report-narrative h1 { font-size: 17px; font-weight: 700; margin: 10px 0 6px; }
+          .report-narrative h2 { font-size: 15px; font-weight: 700; margin: 10px 0 6px; }
+          .report-narrative h3 { font-size: 13.5px; font-weight: 700; margin: 8px 0 4px; }
+          .report-narrative ul { list-style: disc; padding-left: 20px; margin: 0 0 8px; }
+          .report-narrative ol { list-style: decimal; padding-left: 20px; margin: 0 0 8px; }
+          .report-narrative li { margin: 2px 0; }
+          .report-narrative blockquote { border-left: 3px solid #cbd5e1; padding-left: 10px; color: #475569; margin: 0 0 8px; }
+          .report-narrative strong { font-weight: 700; }
+          .report-narrative em { font-style: italic; }
+          .report-narrative u { text-decoration: underline; }
+          .report-narrative s { text-decoration: line-through; }
+          .report-narrative hr { border: 0; border-top: 1px solid #cbd5e1; margin: 10px 0; }
+          .report-narrative table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+          .report-narrative th, .report-narrative td { border: 1px solid #cbd5e1; padding: 5px 8px; text-align: left; vertical-align: top; font-size: 12px; }
+          .report-narrative th { background: #f1f5f9; font-weight: 700; }
           .muted { color: #64748b; }
           .findings-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
           .findings-table th {
@@ -366,6 +386,10 @@ export async function generateResultPdf({
 
   try {
     const page = await browser.newPage();
+    // The report embeds staff-authored HTML (the rich-text narrative). The
+    // document is pure markup with no scripting need, so disable JS to
+    // neutralise anything a crafted narrative might try to run.
+    await page.setJavaScriptEnabled(false);
     await page.setContent(html, { waitUntil: "networkidle0" });
     const pdfBuffer = await page.pdf({
       format: "A4",

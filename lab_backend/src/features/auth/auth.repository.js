@@ -13,6 +13,9 @@ export async function findUserByEmail(email) {
   return prisma.user.findUnique({
     where: { email: email.toLowerCase() },
     include: {
+      // Own tenant identity, so the client can detect a host/tenant mismatch and
+      // bounce the user to their assigned laboratory host. Null for Super Admins.
+      organization: { select: { slug: true, name: true } },
       roles: {
         include: {
           role: {
@@ -32,6 +35,9 @@ export async function findUserById(userId) {
   return prisma.user.findUnique({
     where: { id: userId },
     include: {
+      // Own tenant identity, so the client can detect a host/tenant mismatch and
+      // bounce the user to their assigned laboratory host. Null for Super Admins.
+      organization: { select: { slug: true, name: true } },
       roles: {
         include: {
           role: {

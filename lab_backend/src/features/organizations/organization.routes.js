@@ -36,7 +36,11 @@ router.use(authenticate, tenantScope);
  */
 router
   .route("/")
-  .post(authorize(P.ORG_CREATE), validate(schema.createOrganizationSchema), controller.create)
+  .post(
+    authorize(P.ORG_CREATE),
+    validate(schema.createOrganizationSchema),
+    controller.create,
+  )
   .get(authorize(P.ORG_READ), validate(schema.listOrganizationsSchema), controller.list);
 
 /**
@@ -58,8 +62,16 @@ router
  */
 router
   .route("/:id")
-  .get(authorize(P.ORG_READ), validate(schema.organizationIdParamSchema), controller.getOne)
-  .patch(authorize(P.ORG_UPDATE), validate(schema.updateOrganizationSchema), controller.update);
+  .get(
+    authorize(P.ORG_READ),
+    validate(schema.organizationIdParamSchema),
+    controller.getOne,
+  )
+  .patch(
+    authorize(P.ORG_UPDATE),
+    validate(schema.updateOrganizationSchema),
+    controller.update,
+  );
 
 /**
  * @openapi
@@ -89,6 +101,24 @@ router.post(
   authorize(P.ORG_SUSPEND),
   validate(schema.organizationIdParamSchema),
   controller.activate,
+);
+router.get(
+  "/:id/domains",
+  authorize(P.ORG_READ),
+  validate(schema.organizationIdParamSchema),
+  controller.listDomains,
+);
+router.post(
+  "/:id/domains",
+  authorize(P.ORG_UPDATE),
+  validate(schema.domainSchema),
+  controller.addDomain,
+);
+router.delete(
+  "/:id/domains/:domainId",
+  authorize(P.ORG_UPDATE),
+  validate(schema.domainIdSchema),
+  controller.removeDomain,
 );
 
 export default router;

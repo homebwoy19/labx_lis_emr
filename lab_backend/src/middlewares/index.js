@@ -8,5 +8,6 @@ export { validate } from "./validate.js";
 export { authenticate } from "./authenticate.js";
 export { authorize } from "./authorize.js";
 export { tenantScope } from "./tenantScope.js";
+export { resolveTenant } from "./tenantResolution.js";
 export { subscriptionGuard } from "./subscriptionGuard.js";
 export { apiLimiter, authLimiter } from "./rateLimit.js";

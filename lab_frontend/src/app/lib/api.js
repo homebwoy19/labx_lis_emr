@@ -145,6 +145,9 @@ async function performRequest(path, opts, cacheKey) {
   const headers = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (auth && accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  if (typeof window !== "undefined" && window.location.hostname) {
+    headers["X-Tenant-Host"] = window.location.hostname;
+  }
 
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
@@ -171,7 +174,9 @@ async function performRequest(path, opts, cacheKey) {
     if (err.details && Array.isArray(err.details)) {
       errorMsg = `${errorMsg} (${err.details.map((d) => d.message || JSON.stringify(d)).join("; ")})`;
     } else if (err.details && typeof err.details === "object") {
-      const issues = Object.entries(err.details).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`);
+      const issues = Object.entries(err.details).map(
+        ([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`,
+      );
       if (issues.length > 0) errorMsg = `${errorMsg} (${issues.join("; ")})`;
     }
     throw new ApiError(errorMsg, {
@@ -316,7 +321,14 @@ async function fetchObjectUrl(path, _retry = false) {
 export const api = {
   /** Resolve a laboratory tenant by its public slug (unauthenticated). */
   resolveTenant(slug) {
-    return request(`/tenants/${encodeURIComponent(slug)}`, { auth: false });
+    return request(
+      slug ? `/tenants/${encodeURIComponent(slug)}` : "/tenants/resolve",
+      { auth: false },
+    );
+  },
+
+  resolveCurrentTenant() {
+    return request("/tenants/resolve", { auth: false });
   },
 
   /** Authenticate. `slug` identifies the tenant (omit for platform login). */
@@ -372,7 +384,10 @@ export const api = {
     return request(`/notifications/${id}/read`, { method: "PATCH", body: {} });
   },
   markAllNotificationsRead() {
-    return request("/notifications/mark-all-read", { method: "POST", body: {} });
+    return request("/notifications/mark-all-read", {
+      method: "POST",
+      body: {},
+    });
   },
 
   // ── Organizations (Super Admin) ───────────────────────────────────────────
@@ -389,10 +404,30 @@ export const api = {
     return request(`/organizations/${id}`, { method: "PATCH", body: data });
   },
   suspendOrganization(id, reason) {
-    return request(`/organizations/${id}/suspend`, { method: "POST", body: { reason } });
+    return request(`/organizations/${id}/suspend`, {
+      method: "POST",
+      body: { reason },
+    });
   },
   activateOrganization(id) {
-    return request(`/organizations/${id}/activate`, { method: "POST", body: {} });
+    return request(`/organizations/${id}/activate`, {
+      method: "POST",
+      body: {},
+    });
+  },
+  listOrganizationDomains(id) {
+    return request(`/organizations/${id}/domains`);
+  },
+  connectOrganizationDomain(id, hostname) {
+    return request(`/organizations/${id}/domains`, {
+      method: "POST",
+      body: { hostname },
+    });
+  },
+  disconnectOrganizationDomain(id, domainId) {
+    return request(`/organizations/${id}/domains/${domainId}`, {
+      method: "DELETE",
+    });
   },
 
   // ── Branches ──────────────────────────────────────────────────────────────
@@ -406,7 +441,10 @@ export const api = {
     return request(`/branches/${id}/approve`, { method: "POST", body: {} });
   },
   rejectBranch(id, reason) {
-    return request(`/branches/${id}/reject`, { method: "POST", body: { reason } });
+    return request(`/branches/${id}/reject`, {
+      method: "POST",
+      body: { reason },
+    });
   },
 
   // ── Users ─────────────────────────────────────────────────────────────────
@@ -449,7 +487,10 @@ export const api = {
     return request(`/subscriptions/${id}`, { method: "PATCH", body: data });
   },
   renewalDecision(id, data) {
-    return request(`/subscriptions/${id}/renewal-decision`, { method: "POST", body: data });
+    return request(`/subscriptions/${id}/renewal-decision`, {
+      method: "POST",
+      body: data,
+    });
   },
 
   // ── Patients ──────────────────────────────────────────────────────────────
@@ -477,13 +518,19 @@ export const api = {
     return request(`/samples/${id}`);
   },
   collectSample(id, data) {
-    return request(`/samples/${id}/collect`, { method: "POST", body: data || {} });
+    return request(`/samples/${id}/collect`, {
+      method: "POST",
+      body: data || {},
+    });
   },
   receiveSample(id) {
     return request(`/samples/${id}/receive`, { method: "POST", body: {} });
   },
   rejectSample(id, reason) {
-    return request(`/samples/${id}/reject`, { method: "POST", body: { reason } });
+    return request(`/samples/${id}/reject`, {
+      method: "POST",
+      body: { reason },
+    });
   },
 
   // ── Results ───────────────────────────────────────────────────────────────
@@ -511,17 +558,29 @@ export const api = {
     return request(`/results/${id}/approve`, { method: "POST", body: {} });
   },
   rejectResult(id, reason) {
-    return request(`/results/${id}/reject`, { method: "POST", body: { reason } });
+    return request(`/results/${id}/reject`, {
+      method: "POST",
+      body: { reason },
+    });
   },
   releaseOrder(orderId) {
-    return request(`/results/orders/${orderId}/release`, { method: "POST", body: {} });
+    return request(`/results/orders/${orderId}/release`, {
+      method: "POST",
+      body: {},
+    });
   },
   downloadOrderPdf(orderId) {
-    return downloadBlob(`/results/orders/${orderId}/pdf`, `order-${orderId}.pdf`);
+    return downloadBlob(
+      `/results/orders/${orderId}/pdf`,
+      `order-${orderId}.pdf`,
+    );
   },
   /** Email the approved diagnostic report to the patient's registered email. */
   sendOrderReport(orderId) {
-    return request(`/results/orders/${orderId}/send`, { method: "POST", body: {} });
+    return request(`/results/orders/${orderId}/send`, {
+      method: "POST",
+      body: {},
+    });
   },
 
   // ── Letterhead (lab branding for reports) ─────────────────────────────────
@@ -563,7 +622,10 @@ export const api = {
     return request(`/orders/${id}`);
   },
   cancelOrder(id, reason) {
-    return request(`/orders/${id}/cancel`, { method: "POST", body: { reason } });
+    return request(`/orders/${id}/cancel`, {
+      method: "POST",
+      body: { reason },
+    });
   },
   listPayments(query) {
     return request(buildUrl("/payments", query));
@@ -598,7 +660,10 @@ export const api = {
     return request("/catalog/categories", { method: "POST", body: data });
   },
   updateCategory(id, data) {
-    return request(`/catalog/categories/${id}`, { method: "PATCH", body: data });
+    return request(`/catalog/categories/${id}`, {
+      method: "PATCH",
+      body: data,
+    });
   },
   deleteCategory(id) {
     return request(`/catalog/categories/${id}`, { method: "DELETE" });
@@ -606,4 +671,3 @@ export const api = {
 };
 
 export default api;
-

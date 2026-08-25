@@ -21,6 +21,8 @@ const PUBLIC_SELECT = {
   approvedAt: true,
   createdAt: true,
   updatedAt: true,
+  managerId: true,
+  manager: { select: { id: true, firstName: true, lastName: true } },
 };
 
 export async function findById(db, id) {

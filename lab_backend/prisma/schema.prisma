@@ -162,6 +162,12 @@ enum DocumentKind {
   OTHER
 }
 
+enum OrganizationDomainStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
 // ============================================================================
 // PLATFORM / TENANCY
 // ============================================================================
@@ -204,9 +210,27 @@ model Organization {
   letterhead          Letterhead?
   settings            OrganizationSetting[]
   auditLogs           AuditLog[]
+  domains             OrganizationDomain[]
 
   @@index([status])
   @@map("organizations")
+}
+
+model OrganizationDomain {
+  id             String                   @id @default(uuid()) @db.Uuid
+  organizationId String                   @db.Uuid
+  hostname       String                   @unique
+  status         OrganizationDomainStatus @default(PENDING)
+  isPrimary      Boolean                  @default(false)
+  verifiedAt     DateTime?
+  createdBy      String?                  @db.Uuid
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@map("organization_domains")
 }
 
 model Branch {
@@ -222,6 +246,8 @@ model Branch {
   // Super Admin approval metadata (branch creation requires approval).
   approvedBy     String?      @db.Uuid
   approvedAt     DateTime?
+  // The branch's manager (defaults to the Lab Admin who requested it).
+  managerId      String?      @db.Uuid
 
   createdBy String?   @db.Uuid
   updatedBy String?   @db.Uuid
@@ -231,7 +257,8 @@ model Branch {
   deletedAt DateTime?
 
   organization Organization @relation(fields: [organizationId], references: [id])
-  users        User[]
+  manager      User?        @relation("BranchManager", fields: [managerId], references: [id])
+  users        User[]       @relation("BranchStaff")
   patients     Patient[]
   orders       TestOrder[]
   samples      Sample[]
@@ -276,8 +303,9 @@ model User {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  organization  Organization?  @relation(fields: [organizationId], references: [id])
-  branch        Branch?        @relation(fields: [branchId], references: [id])
+  organization    Organization?  @relation(fields: [organizationId], references: [id])
+  branch          Branch?        @relation("BranchStaff", fields: [branchId], references: [id])
+  managedBranches Branch[]       @relation("BranchManager")
   roles         UserRole[]
   sessions      Session[]
   refreshTokens RefreshToken[]

@@ -42,39 +42,126 @@ export function isPlatformUser(user) {
 export const RESERVED_SLUGS = new Set(["super-admin", "app"]);
 
 /**
- * Resolves the active tenant slug from the current location.
- *
- * Path-based today (`/foundation`, `/medlab`) via the router param; also supports
- * subdomains (`foundation.lis.com`) for the future cutover — whichever is
- * present. Returns null for the platform / no-tenant context.
+ * The platform (Super Admin) apex domain, e.g. `labx.com.ng`. Configurable per
+ * deployment via `VITE_PLATFORM_DOMAIN` (baked at build time); defaults to the
+ * production apex. Every host check below is derived from this single value, so
+ * the domain is never hard-coded in more than one place.
  */
-export function resolveTenantSlug(paramSlug) {
-  const sub = subdomainSlug();
-  if (sub) return sub;
-  if (paramSlug && !RESERVED_SLUGS.has(paramSlug)) return paramSlug;
-  return null;
+export const PLATFORM_DOMAIN = (
+  import.meta.env.VITE_PLATFORM_DOMAIN || "labx.com.ng"
+)
+  .trim()
+  .toLowerCase();
+
+// Subdomains that are the platform itself or infrastructure — never a tenant.
+// Mirrors the backend's IGNORED_SUBDOMAINS so both ends agree.
+const RESERVED_SUBDOMAINS = new Set(["www", "app", "admin", "api"]);
+
+/** Current hostname, lower-cased; "" when there is no DOM (SSR/tests). */
+function currentHost() {
+  if (typeof window === "undefined") return "";
+  return (window.location.hostname || "").toLowerCase();
+}
+
+/** True on the platform apex host itself (e.g. labx.com.ng) — the Super Admin surface. */
+export function isPlatformHost() {
+  return currentHost() === PLATFORM_DOMAIN;
 }
 
 /**
- * Extracts a tenant slug from a production subdomain, ignoring localhost, bare
- * IPs, apex domains, and platform/preview hosts (www, app, vercel.app previews).
+ * The tenant label from a platform subdomain (foundation.labx.com.ng →
+ * "foundation"), or null when the host isn't a tenant-bearing platform
+ * subdomain. Ignores the apex, reserved/infra subdomains, and multi-level labels.
  */
-function subdomainSlug() {
-  if (typeof window === "undefined") return null;
-  const host = window.location.hostname;
-  if (host === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(host)) return null;
+function platformSubdomainLabel() {
+  const host = currentHost();
+  if (!host || !host.endsWith(`.${PLATFORM_DOMAIN}`)) return null;
+  const label = host.slice(0, -(PLATFORM_DOMAIN.length + 1));
+  if (!label || label.includes(".") || RESERVED_SUBDOMAINS.has(label)) {
+    return null;
+  }
+  return label;
+}
 
-  const parts = host.split(".");
-  // Need at least sub.domain.tld to have a subdomain.
-  if (parts.length < 3) return null;
+/**
+ * True on a fully custom domain (foundationlab.com.ng) — a real host that is
+ * neither localhost, a bare IP, a preview deploy, nor anything under the
+ * platform domain. The tenant is resolved from the host by the backend.
+ */
+function isCustomDomainHost() {
+  const host = currentHost();
+  if (!host || host === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    return false;
+  }
+  if (host === PLATFORM_DOMAIN || host.endsWith(`.${PLATFORM_DOMAIN}`)) {
+    return false;
+  }
+  // Preview deploys (project-hash.vercel.app) are not tenants — fall back to
+  // path-based routing there so previews stay usable.
+  if (host === "vercel.app" || host.endsWith(".vercel.app")) return false;
+  return true;
+}
 
-  const first = parts[0];
-  // vercel.app previews look like "project-hash.vercel.app" — 3 parts but the
-  // first segment is the project, not a tenant. Treat *.vercel.app as no tenant.
-  if (host.endsWith("vercel.app")) return null;
-  if (["www", "app", "admin"].includes(first)) return null;
+/** Public form of the custom-domain test (used by the host-redirect guard). */
+export function isOnCustomDomain() {
+  return isCustomDomainHost();
+}
 
-  return first.toLowerCase();
+/**
+ * The tenant slug carried by the CURRENT host, or null. Only platform subdomains
+ * embed the slug in the host (foundation.labx.com.ng → "foundation"); custom
+ * domains resolve server-side, so this returns null for them (and for the apex,
+ * localhost, and path-based hosts). The redirect guard uses this to compare the
+ * current host against the signed-in user's own tenant synchronously.
+ */
+export function currentHostTenantSlug() {
+  return platformSubdomainLabel();
+}
+
+/**
+ * Absolute URL of a tenant's canonical platform host (its subdomain), e.g.
+ * tenantHostUrl("foundation") → "https://foundation.labx.com.ng/app". Used to
+ * bounce a user to their assigned laboratory host across origins. Preserves the
+ * current scheme/port so subdomain-based local dev (e.g. *.lvh.me:5173) works;
+ * in production this yields a clean https URL with no port.
+ */
+export function tenantHostUrl(slug, path = "/app") {
+  const host = `${slug}.${PLATFORM_DOMAIN}`;
+  if (typeof window === "undefined") return `https://${host}${path}`;
+  const scheme = window.location.protocol === "http:" ? "http:" : "https:";
+  const portPart = window.location.port ? `:${window.location.port}` : "";
+  return `${scheme}//${host}${portPart}${path}`;
+}
+
+/**
+ * True when the tenant is carried by the HOST rather than a path segment —
+ * either a platform subdomain (foundation.labx.com.ng) or a custom domain
+ * (foundationlab.com.ng). In both cases the login lives at "/" and the
+ * dashboards at "/app/*", and the backend resolves the tenant from the request
+ * host (the api client sends it as the `X-Tenant-Host` hint).
+ */
+export function isHostTenant() {
+  return platformSubdomainLabel() !== null || isCustomDomainHost();
+}
+
+/**
+ * Back-compat alias. This historically meant "a fully custom domain"; host-based
+ * routing now also covers platform subdomains, so it maps to `isHostTenant()`.
+ */
+export const isCustomTenantHost = isHostTenant;
+
+/**
+ * Resolves the active tenant slug from the current location: a platform
+ * subdomain wins, otherwise the router path param (unless it is a reserved
+ * segment). Returns null for the platform / no-tenant context. Custom domains
+ * resolve server-side (the slug is not derivable from the host), so this
+ * returns null for them.
+ */
+export function resolveTenantSlug(paramSlug) {
+  const sub = platformSubdomainLabel();
+  if (sub) return sub;
+  if (paramSlug && !RESERVED_SLUGS.has(paramSlug)) return paramSlug;
+  return null;
 }
 
 export default {
@@ -82,5 +169,12 @@ export default {
   primaryFrontendRole,
   isPlatformUser,
   resolveTenantSlug,
+  isHostTenant,
+  isCustomTenantHost,
+  isOnCustomDomain,
+  currentHostTenantSlug,
+  tenantHostUrl,
+  isPlatformHost,
+  PLATFORM_DOMAIN,
   RESERVED_SLUGS,
 };

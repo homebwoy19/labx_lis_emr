@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { api, invalidateCache } from "../lib/api";
+import { useAuth } from "../auth/AuthContext";
 import {
   DollarSign,
   TrendingUp,
@@ -720,7 +721,7 @@ export function PatientsScreen() {
 
   // Form state for creating a new patient
   const [createForm, setCreateForm] = useState({
-    firstName: "", lastName: "", dateOfBirth: "", gender: "MALE",
+    firstName: "", lastName: "", dateOfBirth: "", gender: "",
     phone: "", email: "", address: "", branchId: "",
   });
   const [creating, setCreating] = useState(false);
@@ -733,7 +734,7 @@ export function PatientsScreen() {
 
   // Form state for editing
   const [editForm, setEditForm] = useState({
-    firstName: "", lastName: "", dateOfBirth: "", gender: "MALE",
+    firstName: "", lastName: "", dateOfBirth: "", gender: "",
     phone: "", email: "", address: "",
   });
 
@@ -758,7 +759,7 @@ export function PatientsScreen() {
           createdAt: p.createdAt,
         }));
         setPatients(mapped);
-        setTotalPatients(res?.meta?.total || list.length);
+        setTotalPatients(res?.meta?.pagination?.total || list.length);
       })
       .catch(() => setPatients([]))
       .finally(() => setLoading(false));
@@ -811,12 +812,16 @@ export function PatientsScreen() {
       });
       return;
     }
+    if (!createForm.gender) {
+      setAlert({ type: "error", msg: "Please select the patient's gender." });
+      return;
+    }
     setCreating(true);
     try {
       const payload = {
         firstName: createForm.firstName.trim(),
         lastName: createForm.lastName.trim(),
-        gender: createForm.gender || "UNKNOWN",
+        gender: createForm.gender,
         branchId,
         phone: createForm.phone.trim() || undefined,
         email: createForm.email.trim() || undefined,
@@ -826,13 +831,13 @@ export function PatientsScreen() {
         payload.dateOfBirth = createForm.dateOfBirth;
       }
       await api.createPatient(payload);
-      setShowCreate(false);
-      setCreateForm({ firstName: "", lastName: "", dateOfBirth: "", gender: "MALE", phone: "", email: "", address: "", branchId: "" });
       setAlert({ type: "success", msg: "Patient registered successfully." });
       loadPatients();
     } catch (err) {
       setAlert({ type: "error", msg: `Failed to create patient: ${err.message}` });
     } finally {
+      setShowCreate(false);
+      setCreateForm({ firstName: "", lastName: "", dateOfBirth: "", gender: "", phone: "", email: "", address: "", branchId: "" });
       setCreating(false);
     }
   }
@@ -850,11 +855,12 @@ export function PatientsScreen() {
       if (editForm.address.trim()) payload.address = editForm.address.trim();
       if (editForm.dateOfBirth) payload.dateOfBirth = editForm.dateOfBirth;
       await api.updatePatient(editingPatient.id, payload);
-      setEditingPatient(null);
       setAlert({ type: "success", msg: "Patient updated successfully." });
       loadPatients();
     } catch (err) {
       setAlert({ type: "error", msg: `Failed to update patient: ${err.message}` });
+    } finally {
+      setEditingPatient(null);
     }
   }
 
@@ -863,7 +869,7 @@ export function PatientsScreen() {
       firstName: p.firstName || "",
       lastName: p.lastName || "",
       dateOfBirth: p.rawDob || "",
-      gender: p.gender || "MALE",
+      gender: p.gender || "",
       phone: p.phone === "—" ? "" : p.phone || "",
       email: p.email === "—" ? "" : p.email || "",
       address: p.address || "",
@@ -1015,9 +1021,9 @@ export function PatientsScreen() {
                   value={createForm.gender}
                   onChange={(e) => setCreateForm({ ...createForm, gender: e.target.value })}
                 >
+                  <option value="" disabled>Select…</option>
                   <option value="MALE">Male</option>
                   <option value="FEMALE">Female</option>
-                  <option value="OTHER">Other</option>
                 </Select>
               </FormField>
               <FormField label="Phone Number">
@@ -1089,9 +1095,9 @@ export function PatientsScreen() {
                   value={editForm.gender}
                   onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
                 >
+                  <option value="" disabled>Select…</option>
                   <option value="MALE">Male</option>
                   <option value="FEMALE">Female</option>
-                  <option value="OTHER">Other</option>
                 </Select>
               </FormField>
               <FormField label="Phone Number">
@@ -1235,8 +1241,6 @@ export function UsersScreen() {
       .createUser(payload)
       .then((res) => {
         const u = res?.data?.user;
-        setShowAdd(false);
-        setCreateForm(emptyCreateForm);
         setAlert({
           type: "success",
           message: `${u ? `${u.firstName} ${u.lastName}` : "User"} created.`,
@@ -1246,7 +1250,11 @@ export function UsersScreen() {
       .catch((err) =>
         setAlert({ type: "error", message: err.message || "Failed to create user." }),
       )
-      .finally(() => setCreating(false));
+      .finally(() => {
+        setShowAdd(false);
+        setCreateForm(emptyCreateForm);
+        setCreating(false);
+      });
   };
 
   const openEdit = (u) => {
@@ -1273,14 +1281,16 @@ export function UsersScreen() {
     api
       .updateUser(editingUser.id, body)
       .then(() => {
-        setEditingUser(null);
         setAlert({ type: "success", message: "User updated." });
         refreshAfterMutation();
       })
       .catch((err) =>
         setAlert({ type: "error", message: err.message || "Failed to update user." }),
       )
-      .finally(() => setSaving(false));
+      .finally(() => {
+        setEditingUser(null);
+        setSaving(false);
+      });
   };
 
   const handleDeactivate = () => {
@@ -1289,7 +1299,6 @@ export function UsersScreen() {
     api
       .deleteUser(target.id)
       .then(() => {
-        setDeactivating(null);
         setAlert({
           type: "success",
           message: `${target.firstName} ${target.lastName} deactivated. Their records are preserved.`,
@@ -1299,7 +1308,10 @@ export function UsersScreen() {
       .catch((err) =>
         setAlert({ type: "error", message: err.message || "Failed to deactivate user." }),
       )
-      .finally(() => setSaving(false));
+      .finally(() => {
+        setDeactivating(null);
+        setSaving(false);
+      });
   };
 
   const handleReactivate = (u) => {
@@ -1633,6 +1645,7 @@ export function UsersScreen() {
 // ADMIN CENTERS
 // ============================================================================
 export function CentresScreen() {
+  const { user } = useAuth();
   const [centresList, setCentresList] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [editingCentre, setEditingCentre] = useState(null);
@@ -1698,12 +1711,13 @@ export function CentresScreen() {
         phone: newCentre.phone || undefined,
         email: newCentre.email || undefined,
       });
-      setShowAdd(false);
-      setNewCentre({ name: "", code: "", city: "", address: "", phone: "", email: "" });
       setAlert("Branch request submitted for Super Admin approval!");
       loadBranches();
     } catch (err) {
       setAlert(`Failed to request branch: ${err.message}`);
+    } finally {
+      setShowAdd(false);
+      setNewCentre({ name: "", code: "", city: "", address: "", phone: "", email: "" });
     }
   };
 
@@ -1970,6 +1984,12 @@ export function CentresScreen() {
                 onChange={(e) => setNewCentre({ ...newCentre, address: e.target.value })}
               />
             </FormField>
+            <FormField label="Branch Manager">
+              <Input value={user?.fullName || "—"} disabled readOnly />
+              <p className="text-xs text-muted-foreground mt-1">
+                You will be set as the manager for this branch.
+              </p>
+            </FormField>
             <div className="flex justify-end gap-3 pt-2">
               <Btn variant="secondary" type="button" onClick={() => setShowAdd(false)}>
                 Cancel
@@ -2013,7 +2033,9 @@ export function TestCatalogScreen() {
     api
       .listCategories({ limit: 100, sortBy: "name", sortOrder: "asc" })
       .then((res) => setCategories(res?.data?.categories || []))
-      .catch(() => {});
+      .catch((err) =>
+        setAlert({ type: "error", msg: `Could not load categories: ${err.message}` }),
+      );
   };
 
   // Tests — server-paginated with search + type/category filters.
@@ -2036,7 +2058,7 @@ export function TestCatalogScreen() {
       })
       .then((res) => {
         setTests(res?.data?.tests || []);
-        setTotalTests(res?.meta?.total || 0);
+        setTotalTests(res?.meta?.pagination?.total || 0);
       })
       .catch(() => setTests([]));
   };
@@ -2127,6 +2149,7 @@ export function TestCatalogScreen() {
       setShowTest(false);
       loadTests();
     } catch (err) {
+      setShowTest(false);
       setAlert({ type: "error", msg: err.message });
     } finally {
       setSavingTest(false);
@@ -2193,11 +2216,11 @@ export function TestCatalogScreen() {
         });
         setAlert({ type: "success", msg: "Category created successfully." });
       }
-      setShowCat(false);
       loadCategories();
     } catch (err) {
       setAlert({ type: "error", msg: err.message });
     } finally {
+      setShowCat(false);
       setSavingCat(false);
     }
   }

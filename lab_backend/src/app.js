@@ -1,4 +1,5 @@
 import express from "express";
+import { URL } from "node:url";
 import helmet from "helmet";
 import cors from "cors";
 import compression from "compression";
@@ -8,11 +9,13 @@ import pinoHttp from "pino-http";
 import swaggerUi from "swagger-ui-express";
 
 import { config } from "./config/index.js";
+import { prisma } from "./core/prisma.js";
 import { logger } from "./core/logger.js";
 import { requestContext } from "./middlewares/requestContext.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { notFound } from "./middlewares/notFound.js";
 import { apiLimiter } from "./middlewares/rateLimit.js";
+import { resolveTenant } from "./middlewares/tenantResolution.js";
 import v1Router from "./routes/v1.js";
 import swaggerSpec from "./docs/swagger.js";
 
@@ -42,7 +45,25 @@ export function createApp() {
   app.use(helmet());
   app.use(
     cors({
-      origin: config.corsOrigins,
+      origin: async (origin, callback) => {
+        if (!origin || config.corsOrigins.includes(origin)) return callback(null, true);
+        try {
+          const hostname = new URL(origin).hostname.toLowerCase();
+          const allowed =
+            hostname.endsWith(`.${config.platformDomain}`) ||
+            (await prisma.organizationDomain.findFirst({
+              where: {
+                hostname,
+                status: "ACTIVE",
+                organization: { status: "ACTIVE", deletedAt: null },
+              },
+              select: { id: true },
+            }));
+          return callback(null, Boolean(allowed));
+        } catch {
+          return callback(null, false);
+        }
+      },
       credentials: true,
       methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     }),
@@ -65,6 +86,7 @@ export function createApp() {
   );
 
   app.use(apiLimiter);
+  app.use(resolveTenant);
 
   // API documentation.
   app.use(`${config.apiPrefix}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -75,7 +97,11 @@ export function createApp() {
 
   // Root liveness probe.
   app.get("/", (_req, res) =>
-    res.json({ success: true, message: `${config.appName} API`, data: { docs: `${config.apiPrefix}/docs` } }),
+    res.json({
+      success: true,
+      message: `${config.appName} API`,
+      data: { docs: `${config.apiPrefix}/docs` },
+    }),
   );
 
   // Terminal handlers.

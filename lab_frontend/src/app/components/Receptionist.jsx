@@ -145,14 +145,14 @@ export function ReceptionistPatientsScreen() {
 
   // Form state for creating a new patient
   const [createForm, setCreateForm] = useState({
-    firstName: "", lastName: "", dateOfBirth: "", gender: "MALE",
+    firstName: "", lastName: "", dateOfBirth: "", gender: "",
     phone: "", email: "", address: "",
   });
   const [creating, setCreating] = useState(false);
 
   // Form state for editing
   const [editForm, setEditForm] = useState({
-    firstName: "", lastName: "", dateOfBirth: "", gender: "MALE",
+    firstName: "", lastName: "", dateOfBirth: "", gender: "",
     phone: "", email: "", address: "",
   });
 
@@ -176,7 +176,7 @@ export function ReceptionistPatientsScreen() {
           createdAt: p.createdAt,
         }));
         setPatients(mapped);
-        setTotalPatients(res?.meta?.total || list.length);
+        setTotalPatients(res?.meta?.pagination?.total || list.length);
       })
       .catch(() => setPatients([]));
   };
@@ -200,12 +200,16 @@ export function ReceptionistPatientsScreen() {
       setAlert({ type: "error", msg: "First name and last name are required." });
       return;
     }
+    if (!createForm.gender) {
+      setAlert({ type: "error", msg: "Please select the patient's gender." });
+      return;
+    }
     setCreating(true);
     try {
       const payload = {
         firstName: createForm.firstName.trim(),
         lastName: createForm.lastName.trim(),
-        gender: createForm.gender || "UNKNOWN",
+        gender: createForm.gender,
         phone: createForm.phone.trim() || undefined,
         email: createForm.email.trim() || undefined,
         address: createForm.address.trim() || undefined,
@@ -214,13 +218,13 @@ export function ReceptionistPatientsScreen() {
         payload.dateOfBirth = createForm.dateOfBirth;
       }
       await api.createPatient(payload);
-      setShowCreate(false);
-      setCreateForm({ firstName: "", lastName: "", dateOfBirth: "", gender: "MALE", phone: "", email: "", address: "" });
       setAlert({ type: "success", msg: "Patient registered successfully." });
       loadPatients();
     } catch (err) {
       setAlert({ type: "error", msg: `Failed to create patient: ${err.message}` });
     } finally {
+      setShowCreate(false);
+      setCreateForm({ firstName: "", lastName: "", dateOfBirth: "", gender: "", phone: "", email: "", address: "" });
       setCreating(false);
     }
   }
@@ -238,11 +242,12 @@ export function ReceptionistPatientsScreen() {
       if (editForm.address.trim()) payload.address = editForm.address.trim();
       if (editForm.dateOfBirth) payload.dateOfBirth = editForm.dateOfBirth;
       await api.updatePatient(editingPatient.id, payload);
-      setEditingPatient(null);
       setAlert({ type: "success", msg: "Patient updated successfully." });
       loadPatients();
     } catch (err) {
       setAlert({ type: "error", msg: `Failed to update patient: ${err.message}` });
+    } finally {
+      setEditingPatient(null);
     }
   }
 
@@ -251,7 +256,7 @@ export function ReceptionistPatientsScreen() {
       firstName: p.firstName || "",
       lastName: p.lastName || "",
       dateOfBirth: p.rawDob || "",
-      gender: p.gender || "MALE",
+      gender: p.gender || "",
       phone: p.phone === "—" ? "" : p.phone || "",
       email: p.email === "—" ? "" : p.email || "",
       address: p.address || "",
@@ -376,9 +381,9 @@ export function ReceptionistPatientsScreen() {
                   value={createForm.gender}
                   onChange={(e) => setCreateForm({ ...createForm, gender: e.target.value })}
                 >
+                  <option value="" disabled>Select…</option>
                   <option value="MALE">Male</option>
                   <option value="FEMALE">Female</option>
-                  <option value="OTHER">Other</option>
                 </Select>
               </FormField>
               <FormField label="Phone Number">
@@ -450,9 +455,9 @@ export function ReceptionistPatientsScreen() {
                   value={editForm.gender}
                   onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
                 >
+                  <option value="" disabled>Select…</option>
                   <option value="MALE">Male</option>
                   <option value="FEMALE">Female</option>
-                  <option value="OTHER">Other</option>
                 </Select>
               </FormField>
               <FormField label="Phone Number">

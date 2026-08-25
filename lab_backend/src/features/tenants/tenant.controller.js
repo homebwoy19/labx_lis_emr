@@ -13,4 +13,16 @@ export const resolve = asyncHandler(async (req, res) => {
   return sendSuccess(res, { message: "OK", data: { tenant } });
 });
 
-export default { resolve };
+export const resolveCurrent = asyncHandler(async (req, res) => {
+  if (!req.tenant) {
+    return res
+      .status(404)
+      .json({
+        success: false,
+        error: { code: "TENANT_NOT_FOUND", message: "Laboratory not found" },
+      });
+  }
+  return sendSuccess(res, { message: "OK", data: { tenant: req.tenant } });
+});
+
+export default { resolve, resolveCurrent };

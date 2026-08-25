@@ -1,6 +1,10 @@
 import { asyncHandler } from "../../core/asyncHandler.js";
 import { sendSuccess } from "../../core/ApiResponse.js";
-import { setRefreshCookie, clearRefreshCookie, REFRESH_COOKIE_NAME } from "../../utils/cookies.js";
+import {
+  setRefreshCookie,
+  clearRefreshCookie,
+  REFRESH_COOKIE_NAME,
+} from "../../utils/cookies.js";
 import * as authService from "./auth.service.js";
 
 /**
@@ -11,7 +15,10 @@ import * as authService from "./auth.service.js";
  */
 
 export const login = asyncHandler(async (req, res) => {
-  const result = await authService.login(req.body, req.context);
+  const result = await authService.login(
+    { ...req.body, tenantId: req.tenant?.id, tenantSlug: req.tenant?.slug },
+    req.context,
+  );
 
   setRefreshCookie(res, result.refreshToken, result.refreshTokenMaxAge);
 
@@ -76,4 +83,12 @@ export const me = asyncHandler(async (req, res) => {
   return sendSuccess(res, { message: "OK", data: { user } });
 });
 
-export default { login, refresh, logout, forgotPassword, resetPassword, changePassword, me };
+export default {
+  login,
+  refresh,
+  logout,
+  forgotPassword,
+  resetPassword,
+  changePassword,
+  me,
+};

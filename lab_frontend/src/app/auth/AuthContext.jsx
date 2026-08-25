@@ -139,6 +139,11 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(user),
       role: user ? primaryFrontendRole(user) : null,
       organizationId: user?.organizationId ?? null,
+      // Authoritative tenant identity from the token payload (survives across
+      // origins, unlike the localStorage `tenant`). Drives the host-redirect guard
+      // and branding fallback. Null for the platform Super Admin.
+      organizationSlug: user?.organizationSlug ?? null,
+      organizationName: user?.organizationName ?? null,
       permissions,
       hasPermission: (key) => permissions.has(key),
       login,
