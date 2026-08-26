@@ -28,10 +28,12 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --ignore-scripts
 COPY prisma ./prisma
-RUN pnpm exec prisma generate
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/* \
+    && pnpm exec prisma generate
 
 # ── runtime ──────────────────────────────────────────────────────────────────
-FROM node:20-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -41,6 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-liberation \
     ca-certificates \
+    openssl \
     dumb-init \
     && rm -rf /var/lib/apt/lists/*
 
@@ -48,7 +51,7 @@ WORKDIR /app
 
 # Production node_modules from deps, generated client from build.
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /app/node_modules/.pnpm/@prisma+client*/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 COPY . .
 
