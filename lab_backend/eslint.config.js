@@ -11,6 +11,7 @@ export default [
         process: "readonly",
         console: "readonly",
         Buffer: "readonly",
+        fetch: "readonly",
         __dirname: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",

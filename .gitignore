@@ -1,2 +1,3 @@
 # Keep machine-specific VS Code settings, including any credentials, local.
 /.vscode/settings.json
+/.docs
