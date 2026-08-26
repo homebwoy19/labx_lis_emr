@@ -1,3 +1,5 @@
 # Keep machine-specific VS Code settings, including any credentials, local.
 /.vscode/settings.json
-/.docs
+/.docs/ENVIRONMENT_AND_SETUP.md
+/.docs/PROJECT_GUIDE.md
+/.docs/remove.md
